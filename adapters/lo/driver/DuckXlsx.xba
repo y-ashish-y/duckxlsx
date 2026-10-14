@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="DuckXlsx" script:language="StarBasic">Sub Run
+On Error Goto Handler
+Dim rundir As String, op As Object
+rundir = Environ("DUCKXLSX_RUNDIR")
+If rundir = "" Then Error 1000
+op = ReadIni(rundir &amp; "/op.ini")
+If op("op") = "write-range" Then
+WriteRange op
+Else
+Error 1001
+End If
+WriteResult rundir, "ok", op("__rows"), ""
+Exit Sub
+Handler:
+WriteResult Environ("DUCKXLSX_RUNDIR"), "error", "", Err &amp; " " &amp; Error$
+End Sub
+
+Function ReadIni(path As String) As Object
+Dim map As New Collection
+Dim f As Integer, line As String, pos As Integer
+f = FreeFile
+Open path For Input As #f
+Do While Not EOF(#f)
+Line Input #f, line
+pos = InStr(line, "=")
+If pos &gt; 1 Then
+map.Add Mid(line, pos + 1), Left(line, pos - 1)
+End If
+Loop
+Close #f
+ReadIni = map
+End Function
+
+Sub WriteResult(rundir As String, status As String, rows As String, message As String)
+Dim f As Integer
+f = FreeFile
+Open rundir &amp; "/result.ini" For Output As #f
+Print #f, "status=" &amp; status
+Print #f, "rows=" &amp; rows
+Print #f, "message=" &amp; message
+Close #f
+End Sub
+
+Function A1ColRow(cell As String) As Object
+Dim i As Integer, ch As String, letters As String, digits As String
+letters = ""
+digits = ""
+For i = 1 To Len(cell)
+ch = Mid(cell, i, 1)
+If (ch &gt;= "A" And ch &lt;= "Z") Or (ch &gt;= "a" And ch &lt;= "z") Then
+letters = letters &amp; UCase(ch)
+Else
+digits = digits &amp; ch
+End If
+Next i
+Dim col As Long
+col = 0
+For i = 1 To Len(letters)
+col = col * 26 + (Asc(Mid(letters, i, 1)) - Asc("A") + 1)
+Next i
+A1ColRow = Array(col - 1, CLng(digits) - 1)
+End Function
+
+Function TypedValue(text As String, colType As String) As Variant
+Dim t As String
+t = UCase(Trim(colType))
+If t = "INTEGER" Or t = "DOUBLE" Then
+If Trim(text) = "" Then
+TypedValue = Empty
+Exit Function
+End If
+On Error Goto AsText
+TypedValue = Val(text)
+Exit Function
+End If
+If t = "BOOLEAN" Then
+TypedValue = (UCase(Trim(text)) = "TRUE")
+Exit Function
+End If
+TypedValue = text
+Exit Function
+AsText:
+TypedValue = text
+End Function
+
+Sub WriteRange(op As Object)
+Dim ctx As Object, desktop As Object, doc As Object, sheet As Object
+Dim f As Integer, line As String, i As Integer, j As Integer, r As Long
+Dim records As New Collection, datarows As New Collection
+Dim names As Object, types As Object, hasHeader As Boolean
+ctx = GetDefaultContext()
+desktop = ctx.getServiceManager().createInstanceWithContext("com.sun.star.frame.Desktop", ctx)
+hasHeader = (LCase(op("header")) = "true")
+types = Split(op("types"), ",")
+f = FreeFile
+Open op("tsv") For Input As #f
+Do While Not EOF(#f)
+Line Input #f, line
+records.Add Split(line, Chr(9))
+Loop
+Close #f
+Dim rec As Object
+If hasHeader Then
+names = records(1)
+For i = 2 To records.Count
+datarows.Add records(i)
+Next i
+Else
+Dim first As Object
+first = records(1)
+Dim tmp() As String
+ReDim tmp(UBound(first)) As String
+For i = 0 To UBound(first)
+tmp(i) = "col_" &amp; (i + 1)
+Next i
+names = tmp
+For i = 1 To records.Count
+datarows.Add records(i)
+Next i
+End If
+Dim ncols As Integer, nrows As Long, hrows As Integer
+ncols = UBound(names) + 1
+nrows = datarows.Count
+If hasHeader Then hrows = 1 Else hrows = 0
+If nrows + hrows = 0 Then Error 1002
+Dim matrix() As Variant, full() As Variant
+If nrows &gt; 0 Then
+ReDim matrix(nrows - 1, ncols - 1) As Variant
+For r = 0 To nrows - 1
+rec = datarows(r + 1)
+For j = 0 To ncols - 1
+matrix(r, j) = TypedValue(rec(j), types(j))
+Next j
+Next r
+End If
+ReDim full(nrows + hrows - 1, ncols - 1) As Variant
+If hasHeader Then
+For j = 0 To ncols - 1
+full(0, j) = names(j)
+Next j
+End If
+For r = 0 To nrows - 1
+For j = 0 To ncols - 1
+full(r + hrows, j) = matrix(r, j)
+Next j
+Next r
+doc = desktop.loadComponentFromURL("private:factory/scalc", "_blank", 0, Array())
+On Error Resume Next
+sheet = doc.Sheets.getByName(op("sheet"))
+If Err &lt;&gt; 0 Then
+sheet = doc.Sheets.getByIndex(0)
+End If
+On Error Goto 0
+Dim pos As Object, dest As Object
+pos = A1ColRow(op("range"))
+dest = sheet.getCellRangeByPosition(pos(0), pos(1), pos(0) + ncols - 1, pos(1) + nrows + hrows - 1)
+dest.setDataArray(full)
+doc.storeAsURL(ConvertToUrl(op("workbook")), Array())
+doc.close(True)
+op.Add CStr(nrows), "__rows"
+End Sub
+</script:module>
