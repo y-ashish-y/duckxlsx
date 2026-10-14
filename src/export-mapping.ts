@@ -15,12 +15,12 @@ const quoteIdent = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 const quoteString = (value: string): string => `'${value.replace(/'/g, "''")}'`;
 
 function inferType(values: CellValue[]): ColumnType {
-  const present = values.filter((v) => v !== null);
-  if (present.length === 0) return "VARCHAR";
-  if (present.every((v) => typeof v === "boolean")) return "BOOLEAN";
-  if (present.every((v) => v instanceof Date)) return "TIMESTAMP";
-  if (present.every((v) => typeof v === "number" && Number.isInteger(v))) return "INTEGER";
-  if (present.every((v) => typeof v === "number")) return "DOUBLE";
+  const nonNull = values.filter((v) => v !== null);
+  if (nonNull.length === 0) return "VARCHAR";
+  if (nonNull.every((v) => typeof v === "boolean")) return "BOOLEAN";
+  if (nonNull.every((v) => v instanceof Date)) return "TIMESTAMP";
+  if (nonNull.every((v) => typeof v === "number" && Number.isInteger(v))) return "INTEGER";
+  if (nonNull.every((v) => typeof v === "number")) return "DOUBLE";
   return "VARCHAR";
 }
 
