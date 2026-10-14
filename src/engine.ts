@@ -1,4 +1,14 @@
-import { Database } from "duckdb";
+import duckdbPkg from "duckdb";
+
+interface DuckDBDatabase {
+  all(
+    sql: string,
+    ...args: [...params: unknown[], cb: (err: Error | null, rows: Record<string, unknown>[]) => void]
+  ): void;
+  close(cb: () => void): void;
+}
+
+const { Database } = duckdbPkg as unknown as { Database: new (path: string) => DuckDBDatabase };
 
 export interface Engine {
   query<T = Record<string, unknown>>(sql: string, ...params: unknown[]): Promise<T[]>;
@@ -7,7 +17,7 @@ export interface Engine {
 
 // ponytail: native binding for tests/dev; taskpane uses WasmEngine (same SQL) — see src/wasm-engine.ts
 export class NodeEngine implements Engine {
-  private db: Database;
+  private db: DuckDBDatabase;
   constructor(private path: string) {
     this.db = new Database(path);
   }
