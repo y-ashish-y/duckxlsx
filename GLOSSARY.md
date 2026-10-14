@@ -19,3 +19,7 @@ _Avoid_: headers, titles
 **Saved import**:
 A named binding of source (table or query) to destination range, re-runnable by refresh.
 _Avoid_: saved query, connection, live query
+
+**Adapter**:
+A thin native per-host implementation of the five ops (connect, browse, import, export, refresh); Excel, LibreOffice, and GridCraft each get one.
+_Avoid_: plugin, extension, driver
