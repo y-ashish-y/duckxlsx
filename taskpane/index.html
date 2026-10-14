@@ -13,6 +13,11 @@
     <button id="switch">Switch file</button>
     <h2>Catalog</h2>
     <ul id="catalog"></ul>
+    <h2>Export</h2>
+    <input id="table" placeholder="table name" />
+    <label><input id="headers" type="checkbox" checked /> first row is headers</label>
+    <button id="export">Export selection to DuckDB</button>
+    <ul id="preview"></ul>
     <script type="module" src="./taskpane.ts"></script>
   </body>
 </html>

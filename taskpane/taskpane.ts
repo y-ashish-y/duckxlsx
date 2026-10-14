@@ -1,4 +1,5 @@
 import { browse } from "../src/catalog.js";
+import { createTableSql, inferColumns, insertSql, type CellValue } from "../src/export-mapping.js";
 import { WasmEngine } from "../src/wasm-engine.js";
 
 const engine = new WasmEngine();
@@ -61,5 +62,38 @@ Office.onReady(async () => {
     else status.textContent = "Pick a local .duckdb file to begin.";
   } catch {
     status.textContent = "Pick a local .duckdb file to begin.";
+  }
+});
+
+document.querySelector("#export")!.addEventListener("click", async () => {
+  const table = (document.querySelector("#table") as HTMLInputElement).value.trim();
+  if (!table) {
+    status.textContent = "Name the DuckDB table first.";
+    return;
+  }
+  const hasHeaders = (document.querySelector("#headers") as HTMLInputElement).checked;
+  try {
+    await Excel.run(async (ctx) => {
+      const range = ctx.workbook.getSelectedRange();
+      range.load("values");
+      await ctx.sync();
+      const matrix = range.values as CellValue[][];
+      const header = hasHeaders ? (matrix[0].map(String) as string[]) : null;
+      const rows = hasHeaders ? matrix.slice(1) : matrix;
+      const columns = inferColumns(header, rows);
+      const preview = document.querySelector("#preview")!;
+      preview.innerHTML = "";
+      for (const col of columns) {
+        const item = document.createElement("li");
+        item.textContent = `${col.name}: ${col.type}`;
+        preview.appendChild(item);
+      }
+      await engine.query(createTableSql(table, columns));
+      if (rows.length > 0) await engine.query(insertSql(table, columns, rows));
+      await renderCatalog();
+      status.textContent = `Exported selection to ${table}.`;
+    });
+  } catch (err) {
+    fail(err);
   }
 });
