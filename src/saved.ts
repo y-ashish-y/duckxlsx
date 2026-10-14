@@ -30,13 +30,15 @@ export class ImportStore {
   }
 
   save(imp: SavedImport): void {
-    mkdirSync(dirname(this.file), { recursive: true });
-    const rest = this.list().filter((i) => i.name !== imp.name);
-    writeFileSync(this.file, JSON.stringify([...rest, imp], null, 2));
+    this.persist([...this.list().filter((i) => i.name !== imp.name), imp]);
   }
 
   remove(name: string): void {
+    this.persist(this.list().filter((i) => i.name !== name));
+  }
+
+  private persist(rows: SavedImport[]): void {
     mkdirSync(dirname(this.file), { recursive: true });
-    writeFileSync(this.file, JSON.stringify(this.list().filter((i) => i.name !== name), null, 2));
+    writeFileSync(this.file, JSON.stringify(rows, null, 2));
   }
 }
