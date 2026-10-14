@@ -58,14 +58,23 @@ def test_create_guards_mode():
 
 def test_round_trips_native_types(tmp_path):
     import duckdb
+    from datetime import datetime
 
     db = tmp_path / "rt.duckdb"
     con = duckdb.connect(str(db))
-    header = ["i", "d", "b", "s"]
-    rows = [[1, 1.5, True, "a"]]
+    header = ["i", "d", "b", "t", "s"]
+    rows = [[1, 1.5, True, datetime(2026, 1, 2, 3, 4, 5), "a"]]
     columns = infer_columns(header, rows)
-    assert [c["type"] for c in columns] == ["INTEGER", "DOUBLE", "BOOLEAN", "VARCHAR"]
+    assert [c["type"] for c in columns] == ["INTEGER", "DOUBLE", "BOOLEAN", "TIMESTAMP", "VARCHAR"]
     con.execute(create_table_sql("orders", columns, "create"))
     con.execute(insert_sql("orders", columns, rows))
     assert con.execute("SELECT i, d, b, s FROM orders").fetchall() == [(1, 1.5, True, "a")]
+    assert con.execute("SELECT CAST(t AS VARCHAR) AS t FROM orders").fetchall() == [("2026-01-02 03:04:05",)]
     con.close()
+
+
+def test_varchar_values_quote_regardless_of_python_type():
+    assert (
+        insert_sql("t", [{"name": "a", "type": "VARCHAR"}, {"name": "b", "type": "INTEGER"}], [[1, 2]])
+        == "INSERT INTO \"t\" (\"a\", \"b\") VALUES ('1', 2);"
+    )
