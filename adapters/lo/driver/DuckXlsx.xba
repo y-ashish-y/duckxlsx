@@ -72,6 +72,10 @@ TypedValue = Empty
 Exit Function
 End If
 On Error Goto AsText
+If Not IsNumeric(text) Then
+TypedValue = text
+Exit Function
+End If
 TypedValue = Val(text)
 Exit Function
 End If
@@ -110,21 +114,21 @@ Next i
 Else
 Dim first As Object
 first = records(1)
-Dim tmp() As String
+Dim default_names() As String
 ReDim tmp(UBound(first)) As String
 For i = 0 To UBound(first)
-tmp(i) = "col_" &amp; (i + 1)
+default_names(i) = "col_" &amp; (i + 1)
 Next i
-names = tmp
+names = default_names
 For i = 1 To records.Count
 datarows.Add records(i)
 Next i
 End If
-Dim ncols As Integer, nrows As Long, hrows As Integer
+Dim ncols As Integer, nrows As Long, header_rows As Integer
 ncols = UBound(names) + 1
 nrows = datarows.Count
-If hasHeader Then hrows = 1 Else hrows = 0
-If nrows + hrows = 0 Then Error 1002
+If hasHeader Then header_rows = 1 Else header_rows = 0
+If nrows + header_rows = 0 Then Error 1002
 Dim matrix() As Variant, full() As Variant
 If nrows &gt; 0 Then
 ReDim matrix(nrows - 1, ncols - 1) As Variant
@@ -135,7 +139,7 @@ matrix(r, j) = TypedValue(rec(j), types(j))
 Next j
 Next r
 End If
-ReDim full(nrows + hrows - 1, ncols - 1) As Variant
+ReDim full(nrows + header_rows - 1, ncols - 1) As Variant
 If hasHeader Then
 For j = 0 To ncols - 1
 full(0, j) = names(j)
@@ -143,7 +147,7 @@ Next j
 End If
 For r = 0 To nrows - 1
 For j = 0 To ncols - 1
-full(r + hrows, j) = matrix(r, j)
+full(r + header_rows, j) = matrix(r, j)
 Next j
 Next r
 doc = desktop.loadComponentFromURL("private:factory/scalc", "_blank", 0, Array())
@@ -153,9 +157,9 @@ If Err &lt;&gt; 0 Then
 sheet = doc.Sheets.getByIndex(0)
 End If
 On Error Goto 0
-Dim pos As Object, dest As Object
-pos = A1ColRow(op("range"))
-dest = sheet.getCellRangeByPosition(pos(0), pos(1), pos(0) + ncols - 1, pos(1) + nrows + hrows - 1)
+Dim origin As Object, dest As Object
+origin = A1ColRow(op("range"))
+dest = sheet.getCellRangeByPosition(origin(0), origin(1), origin(0) + ncols - 1, origin(1) + nrows + header_rows - 1)
 dest.setDataArray(full)
 doc.storeAsURL(ConvertToUrl(op("workbook")), Array())
 doc.close(True)
