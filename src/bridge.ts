@@ -124,6 +124,10 @@ export class GridCraftBridge {
     await this.callTool("new_workbook", {});
   }
 
+  async executeCommand(command: string, params: Record<string, unknown> = {}): Promise<unknown> {
+    return this.callTool("execute_command", { command, params });
+  }
+
   async openWorkbook(path: string): Promise<void> {
     await this.callTool("open_workbook", { path });
   }
