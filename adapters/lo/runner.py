@@ -19,6 +19,13 @@ class MacroError(RuntimeError):
     pass
 
 
+def write_op_ini(run_dir: Path, op: dict) -> Path:
+    """Single writer for the op.ini contract (keys documented in module docstring)."""
+    path = Path(run_dir) / "op.ini"
+    path.write_text("".join(f"{key}={value}\n" for key, value in op.items()))
+    return path
+
+
 def _soffice() -> list:
     if shutil.which("flatpak") is not None:
         probe = subprocess.run(["flatpak", "info", "org.libreoffice.LibreOffice"], capture_output=True)
@@ -37,7 +44,7 @@ def run_op(run_dir: Path) -> dict:
     if cmd[0] == "flatpak":
         cmd = cmd[:2] + [f"--env=DUCKXLSX_RUNDIR={run_dir}"] + cmd[2:]
     try:
-        subprocess.run(
+        proc = subprocess.run(
             cmd + ["--headless", "--norestore", MACRO_URL],
             env=env,
             capture_output=True,
@@ -46,6 +53,8 @@ def run_op(run_dir: Path) -> dict:
         )
     except subprocess.TimeoutExpired as e:
         raise MacroError(f"macro run timed out after {TIMEOUT_S}s") from e
+    if proc.returncode != 0:
+        raise MacroError(f"soffice exited {proc.returncode}: {(proc.stderr or '')[-1000:]}")
     result_file = run_dir / "result.ini"
     if not result_file.exists():
         raise MacroError("macro produced no result.ini")
@@ -67,6 +76,8 @@ def convert_to_csv(workbook: Path, out_csv: Path) -> Path:
         text=True,
         timeout=TIMEOUT_S,
     )
+    if proc.returncode != 0:
+        raise MacroError(f"convert-to exited {proc.returncode}: {(proc.stderr or '')[-1000:]}")
     produced = out_csv.parent / (Path(workbook).stem + ".csv")
     if not produced.exists():
         raise MacroError(f"convert-to failed: {proc.stderr[-500:] if proc.stderr else '(no output)'}")
