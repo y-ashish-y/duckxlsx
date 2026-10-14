@@ -13,17 +13,31 @@ describe("SavedImportStore", () => {
   it("saves, lists, and re-gets imports by name", () => {
     const store = new SavedImportStore(stubStorage());
     expect(store.list()).toEqual([]);
-    store.save({ name: "orders-q4", schema: "app", table: "orders", columns: ["id"], limit: 100 });
+    store.save({
+      name: "orders-q4",
+      schema: "app",
+      table: "orders",
+      columns: ["id"],
+      limit: 100,
+      destination: { mode: "new-sheet" },
+    });
     expect(store.list()).toEqual([
-      { name: "orders-q4", schema: "app", table: "orders", columns: ["id"], limit: 100 },
+      {
+        name: "orders-q4",
+        schema: "app",
+        table: "orders",
+        columns: ["id"],
+        limit: 100,
+        destination: { mode: "new-sheet" },
+      },
     ]);
     expect(store.get("orders-q4")?.table).toBe("orders");
   });
 
   it("upserts on repeated save and removes on demand", () => {
     const store = new SavedImportStore(stubStorage());
-    store.save({ name: "x", schema: "s", table: "t", columns: ["a"] });
-    store.save({ name: "x", schema: "s", table: "t", columns: ["a", "b"], limit: 5 });
+    store.save({ name: "x", schema: "s", table: "t", columns: ["a"], destination: { mode: "current" } });
+    store.save({ name: "x", schema: "s", table: "t", columns: ["a", "b"], limit: 5, destination: { mode: "current" } });
     expect(store.list()).toHaveLength(1);
     expect(store.get("x")?.columns).toEqual(["a", "b"]);
     store.remove("x");

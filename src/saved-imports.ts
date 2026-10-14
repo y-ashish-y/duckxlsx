@@ -4,6 +4,7 @@ export interface SavedImport {
   table: string;
   columns: string[];
   limit?: number;
+  destination: { mode: "new-sheet" } | { mode: "current" };
 }
 
 export interface StringStorage {
@@ -15,13 +16,10 @@ const KEY = "duckxlsx.savedImports";
 
 // ponytail: localStorage-backed in v1 (per browser profile); workbook-embedded persistence is a later ticket
 export class SavedImportStore {
-  constructor(
-    private storage: StringStorage,
-    private key = KEY,
-  ) {}
+  constructor(private storage: StringStorage) {}
 
   list(): SavedImport[] {
-    const raw = this.storage.getItem(this.key);
+    const raw = this.storage.getItem(KEY);
     if (!raw) return [];
     return JSON.parse(raw) as SavedImport[];
   }
@@ -32,10 +30,10 @@ export class SavedImportStore {
 
   save(imp: SavedImport): void {
     const rest = this.list().filter((i) => i.name !== imp.name);
-    this.storage.setItem(this.key, JSON.stringify([...rest, imp]));
+    this.storage.setItem(KEY, JSON.stringify([...rest, imp]));
   }
 
   remove(name: string): void {
-    this.storage.setItem(this.key, JSON.stringify(this.list().filter((i) => i.name !== name)));
+    this.storage.setItem(KEY, JSON.stringify(this.list().filter((i) => i.name !== name)));
   }
 }

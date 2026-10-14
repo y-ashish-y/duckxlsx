@@ -1,7 +1,14 @@
 const quoteIdent = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 
-export function buildImportSql(schema: string, table: string, columns: string[], limit?: number): string {
-  const select = columns.map(quoteIdent).join(", ");
-  const limitClause = limit === undefined ? "" : ` LIMIT ${limit}`;
-  return `SELECT ${select} FROM ${quoteIdent(schema)}.${quoteIdent(table)}${limitClause};`;
+export interface ImportSource {
+  schema: string;
+  table: string;
+  columns: string[];
+  limit?: number;
+}
+
+export function buildImportSql(source: ImportSource): string {
+  const select = source.columns.map(quoteIdent).join(", ");
+  const limitClause = source.limit === undefined ? "" : ` LIMIT ${source.limit}`;
+  return `SELECT ${select} FROM ${quoteIdent(source.schema)}.${quoteIdent(source.table)}${limitClause};`;
 }
