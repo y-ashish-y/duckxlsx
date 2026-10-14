@@ -2,6 +2,8 @@ import { spawn, type ChildProcess } from "child_process";
 
 export type CellMatrix = (string | number | boolean | null)[][];
 
+export type CellValue = string | number | boolean | null;
+
 interface Pending {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
