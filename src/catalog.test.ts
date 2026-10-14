@@ -17,4 +17,16 @@ describe("browse", () => {
     ]);
     await engine.close();
   });
+
+  it("includes views alongside tables", async () => {
+    const engine = new NodeEngine(":memory:");
+    await engine.query("CREATE TABLE base(id INTEGER)");
+    await engine.query("CREATE VIEW ids AS SELECT id FROM base");
+
+    const schemas = await browse(engine);
+    const main = schemas.find((s) => s.name === "main")!;
+    expect(main.tables.map((t) => t.name).sort()).toEqual(["base", "ids"]);
+    expect(main.tables.find((t) => t.name === "ids")!.columns).toEqual([{ name: "id" }]);
+    await engine.close();
+  });
 });
