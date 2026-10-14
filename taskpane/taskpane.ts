@@ -80,22 +80,56 @@ function checkedColumns(): string[] {
     .map((b) => b.value);
 }
 
-function selectedLimit(): number | undefined {
-  const n = Number(importLimit.value);
-  return importLimit.value.trim() === "" || !Number.isInteger(n) || n <= 0 ? undefined : n;
+function requireSelected(): { schema: string; table: string } {
+  if (!selected) {
+    status.textContent = "Pick a table above first.";
+    throw new Error("no table selected");
+  }
+  return selected;
 }
 
-async function runImport(imp: Omit<SavedImport, "name"> & { name?: string }): Promise<void> {
-  const sql = buildImportSql(imp.schema, imp.table, imp.columns, imp.limit);
+function parseLimit(): number | undefined {
+  const raw = importLimit.value.trim();
+  if (raw === "") return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) {
+    status.textContent = `Row limit "${raw}" is not a positive whole number — fix it or clear it.`;
+    throw new Error("invalid limit");
+  }
+  return n;
+}
+
+function requireColumns(): string[] {
+  const columns = checkedColumns();
+  if (columns.length === 0) {
+    status.textContent = "Check at least one column.";
+    throw new Error("no columns checked");
+  }
+  return columns;
+}
+
+async function runImport(
+  imp: Omit<SavedImport, "name" | "destination"> & { name?: string },
+  destination: SavedImport["destination"],
+): Promise<void> {
+  const sql = buildImportSql({ schema: imp.schema, table: imp.table, columns: imp.columns, limit: imp.limit });
   const rows = await engine.query<Record<string, unknown>>(sql);
   const values = rows.map((r) => imp.columns.map((c) => (r[c] as CellValue) ?? null));
   await Excel.run(async (ctx) => {
-    const sheet = importNewSheet.checked
-      ? ctx.workbook.worksheets.add(imp.name ?? imp.table)
-      : ctx.workbook.worksheets.getActiveWorksheet();
-    const dest = importNewSheet.checked
-      ? sheet.getRange("A1").getResizedRange(values.length, imp.columns.length - 1)
-      : ctx.workbook.getSelectedRange().getResizedRange(values.length, imp.columns.length - 1);
+    let sheet: Excel.Worksheet;
+    if (destination.mode === "new-sheet") {
+      const sheetName = imp.name ?? imp.table;
+      try {
+        sheet = ctx.workbook.worksheets.getItem(sheetName);
+      } catch {
+        sheet = ctx.workbook.worksheets.add(sheetName);
+      }
+    } else {
+      sheet = ctx.workbook.worksheets.getActiveWorksheet();
+    }
+    const anchor =
+      destination.mode === "new-sheet" ? sheet.getRange("A1") : ctx.workbook.getSelectedRange();
+    const dest = anchor.getResizedRange(values.length, imp.columns.length - 1);
     dest.values = [imp.columns, ...values];
     sheet.tables.add(dest, true);
     await ctx.sync();
@@ -111,8 +145,7 @@ function renderSaved(): void {
     const rerun = document.createElement("button");
     rerun.textContent = imp.name;
     rerun.addEventListener("click", () => {
-      selected = { schema: imp.schema, table: imp.table };
-      runImport(imp).catch(fail);
+      runImport(imp, imp.destination).catch(fail);
     });
     const remove = document.createElement("button");
     remove.textContent = "×";
@@ -126,13 +159,11 @@ function renderSaved(): void {
 }
 
 document.querySelector("#import-preview")!.addEventListener("click", async () => {
-  if (!selected) {
-    status.textContent = "Pick a table above first.";
-    return;
-  }
   try {
+    const { schema, table } = requireSelected();
+    const columns = requireColumns();
     const rows = await engine.query<Record<string, unknown>>(
-      buildImportSql(selected.schema, selected.table, checkedColumns(), 5),
+      buildImportSql({ schema, table, columns, limit: parseLimit() ?? 5 }),
     );
     importPreviewList.innerHTML = "";
     for (const row of rows) {
@@ -142,36 +173,39 @@ document.querySelector("#import-preview")!.addEventListener("click", async () =>
     }
     status.textContent = `${rows.length} preview rows.`;
   } catch (err) {
-    fail(err);
+    if ((err as Error).message !== "no table selected") fail(err);
   }
 });
 
-async function commitImport(persist: boolean): Promise<void> {
-  if (!selected) {
-    status.textContent = "Pick a table above first.";
-    return;
-  }
-  const columns = checkedColumns();
-  if (columns.length === 0) {
-    status.textContent = "Check at least one column.";
-    return;
-  }
-  const imp = { schema: selected.schema, table: selected.table, columns, limit: selectedLimit() };
-  try {
-    if (persist) {
-      const name = importName.value.trim() || selected.table;
-      savedStore.save({ ...imp, name });
-      await runImport({ ...imp, name });
-    } else {
-      await runImport(imp);
-    }
-  } catch (err) {
-    fail(err);
-  }
+function collectDraft(): Omit<SavedImport, "name" | "destination"> {
+  const { schema, table } = requireSelected();
+  return { schema, table, columns: requireColumns(), limit: parseLimit() };
 }
 
-document.querySelector("#import-save")!.addEventListener("click", () => commitImport(true));
-document.querySelector("#import-once")!.addEventListener("click", () => commitImport(false));
+function currentDestination(): SavedImport["destination"] {
+  return importNewSheet.checked ? { mode: "new-sheet" } : { mode: "current" };
+}
+
+document.querySelector("#import-save")!.addEventListener("click", async () => {
+  try {
+    const draft = collectDraft();
+    const name = importName.value.trim() || draft.table;
+    const destination = currentDestination();
+    savedStore.save({ ...draft, name, destination });
+    await runImport({ ...draft, name }, destination);
+  } catch (err) {
+    if (!["no table selected", "no columns checked", "invalid limit"].includes((err as Error).message)) fail(err);
+  }
+});
+
+document.querySelector("#import-once")!.addEventListener("click", async () => {
+  try {
+    const draft = collectDraft();
+    await runImport(draft, currentDestination());
+  } catch (err) {
+    if (!["no table selected", "no columns checked", "invalid limit"].includes((err as Error).message)) fail(err);
+  }
+});
 
 async function showConnected(name: string): Promise<void> {
   status.textContent = `Connected: ${name}`;
