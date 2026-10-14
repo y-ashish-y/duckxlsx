@@ -1,11 +1,10 @@
 import { homedir } from "os";
 import { existsSync } from "fs";
 import { join } from "path";
+import { fileURLToPath } from "url";
 import { parseArgs, type CliCommand } from "./cli.js";
 import { ImportStore } from "./saved.js";
-import { runSaved } from "./run.js";
-import { NodeEngine } from "./engine.js";
-import { GridCraftBridge } from "./bridge.js";
+import { ensureWorkbook, runSaved, tableColumns } from "./run.js";
 
 export interface Deps {
   storeFile: string;
@@ -27,7 +26,14 @@ export async function dispatch(argv: string[], deps: Deps): Promise<number> {
   const run = deps.runner ?? runSaved;
   try {
     if (cmd.command === "list") {
-      for (const imp of store.list()) console.log(`${imp.name}\t${imp.kind}\t${imp.workbook}\t${imp.range}`);
+      for (const imp of store.list()) {
+        const source =
+          imp.kind === "table" ? `${imp.schema}.${imp.table}` : (imp.sql ?? "");
+        const extras = [imp.limit === undefined ? "" : `limit=${imp.limit}`, `range=${imp.range}`]
+          .filter(Boolean)
+          .join(" ");
+        console.log(`${imp.name}\t${imp.kind}\t${source}\t${imp.dbPath}\t${extras}`);
+      }
       return 0;
     }
     if (cmd.command === "remove") {
@@ -43,44 +49,35 @@ export async function dispatch(argv: string[], deps: Deps): Promise<number> {
       console.error("save needs --table SCHEMA.TABLE or --sql SQL");
       return 2;
     }
+    if (!existsSync(cmd.workbook)) await ensureWorkbook(deps.cliPath, cmd.workbook);
     if (cmd.table) {
-      const parts = cmd.table.split(".");
-      if (parts.length !== 2 || !parts[0] || !parts[1]) {
-        console.error(`--table must be SCHEMA.TABLE (got "${cmd.table}")`);
-        return 2;
-      }
-      const [schema, table] = parts;
-      const engine = new NodeEngine(cmd.db);
-      let columns: string[];
-      try {
-        const cols = await engine.query<{ column_name: string }>(
-          `SELECT column_name FROM information_schema.columns WHERE table_schema = '${schema.replace(/'/g, "''")}' AND table_name = '${table.replace(/'/g, "''")}' ORDER BY ordinal_position`,
-        );
-        columns = cols.map((c) => c.column_name);
-      } finally {
-        await engine.close();
-      }
+      const columns = await tableColumns(cmd.db, cmd.table.schema, cmd.table.table);
       if (columns.length === 0) {
-        console.error(`table ${cmd.table} not found or has no columns`);
+        console.error(`table ${cmd.table.schema}.${cmd.table.table} not found or has no columns`);
         return 1;
       }
-      if (!existsSync(cmd.workbook)) {
-        const bridge = new GridCraftBridge(deps.cliPath);
-        await bridge.start();
-        try {
-          await bridge.newWorkbook();
-          await bridge.saveWorkbook(cmd.workbook);
-        } finally {
-          await bridge.close();
-        }
-      }
-      store.save({ name: cmd.name, dbPath: cmd.db, kind: "table", schema, table, columns, workbook: cmd.workbook, range: cmd.range });
+      store.save({
+        name: cmd.name,
+        dbPath: cmd.db,
+        kind: "table",
+        schema: cmd.table.schema,
+        table: cmd.table.table,
+        columns,
+        limit: cmd.limit,
+        workbook: cmd.workbook,
+        range: cmd.range,
+      });
     } else {
-      if (!existsSync(cmd.workbook)) {
-        console.error(`workbook not found: ${cmd.workbook} (save creates it only for --table)`);
-        return 1;
-      }
-      store.save({ name: cmd.name, dbPath: cmd.db, kind: "query", sql: cmd.sql!, workbook: cmd.workbook, range: cmd.range });
+      store.save({
+        name: cmd.name,
+        dbPath: cmd.db,
+        kind: "query",
+        sql: cmd.sql!,
+        params: cmd.params,
+        limit: cmd.limit,
+        workbook: cmd.workbook,
+        range: cmd.range,
+      });
     }
     console.log(`saved ${cmd.name}`);
     return 0;
@@ -104,6 +101,6 @@ export async function main(argv: string[]): Promise<void> {
 }
 
 const invokedAs = process.argv[1] ?? "";
-if (invokedAs.endsWith("main.js") || invokedAs.endsWith("cli.cjs")) {
+if (invokedAs && fileURLToPath(import.meta.url) === invokedAs) {
   await main(process.argv.slice(2));
 }

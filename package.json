@@ -16,7 +16,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:cli": "tsc --outDir dist-cli --rootDir src --module nodenext --moduleResolution nodenext --target es2022 --strict --skipLibCheck --esModuleInterop"
   },
   "repository": {
     "type": "git",
@@ -31,6 +32,6 @@
   "homepage": "https://github.com/y-ashish-y/duckxlsx#readme",
   "type": "module",
   "bin": {
-    "duckxlsx": "./dist-cli/cli.cjs"
+    "duckxlsx": "./dist-cli/main.js"
   }
 }
