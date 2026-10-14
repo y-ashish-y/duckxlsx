@@ -7,6 +7,13 @@ interface Pending {
   reject: (err: Error) => void;
 }
 
+const PROTOCOL_VERSION = "2025-06-18";
+const REQUEST_TIMEOUT_MS = 30_000;
+
+function toolText(result: { content?: { type: string; text: string }[] }, sep: string): string {
+  return result?.content?.map((c) => c.text).join(sep) ?? "";
+}
+
 // Thin stdio JSON-RPC client over `gridcraft-cli mcp` (newline-delimited,
 // protocol 2025-06-18). One tool call at a time; responses matched by id.
 export class GridCraftBridge {
@@ -15,17 +22,29 @@ export class GridCraftBridge {
   private pending = new Map<number, Pending>();
   private buffer = "";
 
-  constructor(private binary: string) {}
+  constructor(private cliPath: string) {}
 
   async start(): Promise<void> {
-    this.proc = spawn(this.binary, ["mcp"], { stdio: ["pipe", "pipe", "inherit"] });
+    this.proc = spawn(this.cliPath, ["mcp"], { stdio: ["pipe", "pipe", "inherit"] });
     this.proc.stdout!.on("data", (chunk: Buffer) => this.onData(chunk.toString()));
-    await this.request("initialize", {
-      protocolVersion: "2025-06-18",
+    this.proc.on("error", (err) => this.failAll(`spawn failed: ${err.message}`));
+    this.proc.on("exit", (code) => {
+      if (this.pending.size > 0) this.failAll(`gridcraft-cli exited with code ${code}`);
+    });
+    const hello = (await this.request("initialize", {
+      protocolVersion: PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: { name: "duckxlsx", version: "0.0.0" },
-    });
+    })) as { protocolVersion?: string };
+    if (hello?.protocolVersion !== PROTOCOL_VERSION) {
+      throw new Error(`gridcraft mcp: protocol mismatch (server: ${hello?.protocolVersion})`);
+    }
     this.notify("notifications/initialized");
+  }
+
+  private failAll(message: string): void {
+    for (const [, pending] of this.pending) pending.reject(new Error(message));
+    this.pending.clear();
   }
 
   private onData(text: string): void {
@@ -35,7 +54,12 @@ export class GridCraftBridge {
       const line = this.buffer.slice(0, newline).trim();
       this.buffer = this.buffer.slice(newline + 1);
       if (!line) continue;
-      const msg = JSON.parse(line) as { id?: number; result?: unknown; error?: { message: string } };
+      let msg: { id?: number; result?: unknown; error?: { message: string } };
+      try {
+        msg = JSON.parse(line) as typeof msg;
+      } catch {
+        continue;
+      }
       if (msg.id === undefined) continue;
       const pending = this.pending.get(msg.id);
       if (!pending) continue;
@@ -53,8 +77,26 @@ export class GridCraftBridge {
   private request(method: string, params: unknown): Promise<unknown> {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.send({ jsonrpc: "2.0", id, method, params });
+      const timer = setTimeout(() => {
+        if (this.pending.delete(id)) reject(new Error(`gridcraft mcp: ${method} timed out`));
+      }, REQUEST_TIMEOUT_MS);
+      this.pending.set(id, {
+        resolve: (v) => {
+          clearTimeout(timer);
+          resolve(v);
+        },
+        reject: (e) => {
+          clearTimeout(timer);
+          reject(e);
+        },
+      });
+      try {
+        this.send({ jsonrpc: "2.0", id, method, params });
+      } catch (err) {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(err as Error);
+      }
     });
   }
 
@@ -62,16 +104,13 @@ export class GridCraftBridge {
     this.send({ jsonrpc: "2.0", method });
   }
 
-  async call(tool: string, args: Record<string, unknown>): Promise<unknown> {
+  async callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
     const result = (await this.request("tools/call", { name: tool, arguments: args })) as {
       content?: { type: string; text: string }[];
       isError?: boolean;
     };
-    if (result?.isError) {
-      const text = result.content?.map((c) => c.text).join(" ") ?? tool;
-      throw new Error(`gridcraft ${tool}: ${text}`);
-    }
-    const text = result?.content?.map((c) => c.text).join("") ?? "";
+    if (result?.isError) throw new Error(`gridcraft ${tool}: ${toolText(result, " ")}`);
+    const text = toolText(result, "");
     try {
       return JSON.parse(text) as unknown;
     } catch {
@@ -80,32 +119,31 @@ export class GridCraftBridge {
   }
 
   async newWorkbook(): Promise<void> {
-    await this.call("new_workbook", {});
+    await this.callTool("new_workbook", {});
   }
 
   async openWorkbook(path: string): Promise<void> {
-    await this.call("open_workbook", { path });
+    await this.callTool("open_workbook", { path });
   }
 
   async saveWorkbook(path?: string): Promise<void> {
-    await this.call("save_workbook", path ? { path } : {});
+    await this.callTool("save_workbook", path ? { path } : {});
   }
 
   async writeRange(range: string, values: CellMatrix): Promise<void> {
-    await this.call("write_range", { range, values });
+    await this.callTool("write_range", { range, values });
   }
 
   async readRange(range: string): Promise<CellMatrix> {
-    const result = (await this.call("read_range", { range })) as { values?: CellMatrix } | CellMatrix;
+    const result = (await this.callTool("read_range", { range })) as { values?: CellMatrix } | CellMatrix;
     if (Array.isArray(result)) return result;
     if (result && Array.isArray(result.values)) return result.values;
     throw new Error(`gridcraft read_range: unexpected response for ${range}`);
   }
 
   async close(): Promise<void> {
+    this.failAll("bridge closed");
     this.proc?.kill();
     this.proc = null;
-    for (const [, pending] of this.pending) pending.reject(new Error("bridge closed"));
-    this.pending.clear();
   }
 }
