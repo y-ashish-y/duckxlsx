@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createTableSql, inferColumns, insertSql } from "./export-mapping.js";
 import { NodeEngine } from "./engine.js";
+
+let engine: NodeEngine;
+beforeEach(() => {
+  engine = new NodeEngine(":memory:");
+});
 
 describe("export mapping", () => {
   it("infers INTEGER and VARCHAR columns with header row", () => {
@@ -22,8 +27,11 @@ describe("export mapping", () => {
     ]);
   });
 
-  it("honors per-column type overrides", () => {
-    expect(inferColumns(["id"], [[1]], { id: "DOUBLE" })).toEqual([{ name: "id", type: "DOUBLE" }]);
+  it("honors per-column renames and retypes", () => {
+    expect(inferColumns(["id", "n"], [[1, "a"]], { id: "DOUBLE", n: { name: "name" } })).toEqual([
+      { name: "id", type: "DOUBLE" },
+      { name: "name", type: "VARCHAR" },
+    ]);
   });
 
   it("escapes quotes in string literals", () => {
@@ -33,28 +41,26 @@ describe("export mapping", () => {
   });
 
   it("round-trips native types through create and insert", async () => {
-    const engine = new NodeEngine(":memory:");
-    const header = ["id", "name"];
-    const rows = [
-      [1, "a"],
-      [2, "b"],
-    ];
+    const header = ["i", "d", "b", "t", "s"];
+    const rows = [[1, 1.5, true, new Date("2026-01-02T03:04:05Z"), "a"]];
     const columns = inferColumns(header, rows);
-    await engine.query(createTableSql("orders", columns));
+    expect(columns.map((c) => c.type)).toEqual(["INTEGER", "DOUBLE", "BOOLEAN", "TIMESTAMP", "VARCHAR"]);
+    await engine.query(createTableSql("orders", columns, "create"));
     await engine.query(insertSql("orders", columns, rows));
-    expect(await engine.query("SELECT id, name FROM orders ORDER BY id")).toEqual([
-      { id: 1, name: "a" },
-      { id: 2, name: "b" },
+    expect(await engine.query("SELECT i, d, b, s FROM orders")).toEqual([
+      { i: 1, d: 1.5, b: true, s: "a" },
     ]);
+    const back = await engine.query<{ t: string }>("SELECT CAST(t AS VARCHAR) AS t FROM orders");
+    expect(back).toEqual([{ t: "2026-01-02 03:04:05" }]);
     await engine.close();
   });
 
-  it("overwrite replaces existing rows", async () => {
-    const engine = new NodeEngine(":memory:");
+  it("create fails on existing tables, overwrite replaces rows", async () => {
     const columns = inferColumns(["id"], [[1]]);
-    await engine.query(createTableSql("snap", columns));
+    await engine.query(createTableSql("snap", columns, "create"));
     await engine.query(insertSql("snap", columns, [[1]]));
-    await engine.query(createTableSql("snap", columns));
+    await expect(engine.query(createTableSql("snap", columns, "create"))).rejects.toThrow();
+    await engine.query(createTableSql("snap", columns, "overwrite"));
     await engine.query(insertSql("snap", columns, [[2]]));
     expect(await engine.query("SELECT id FROM snap")).toEqual([{ id: 2 }]);
     await engine.close();
