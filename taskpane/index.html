@@ -14,10 +14,13 @@
     <h2>Catalog</h2>
     <ul id="catalog"></ul>
     <h2>Export</h2>
-    <input id="table" placeholder="table name" />
-    <label><input id="headers" type="checkbox" checked /> first row is headers</label>
+    <input id="export-table" placeholder="table name" />
+    <label><input id="export-headers" type="checkbox" checked /> first row is headers</label>
+    <label><input id="export-overwrite" type="checkbox" /> overwrite existing table</label>
+    <button id="export-preview-btn">Preview selection</button>
     <button id="export">Export selection to DuckDB</button>
-    <ul id="preview"></ul>
+    <p id="export-address"></p>
+    <ul id="export-preview"></ul>
     <script type="module" src="./taskpane.ts"></script>
   </body>
 </html>
