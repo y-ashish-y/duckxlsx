@@ -30,7 +30,7 @@ def _write_tsv(path: Path, header, rows) -> None:
             writer.writerow([format_tsv_cell(v) for v in row])
 
 
-def _run_tsv_import(db_path: str, header, rows, columns, workbook: str, run_dir: Path) -> int:
+def _run_tsv_import(header, rows, columns, workbook: str, run_dir: Path) -> int:
     run_dir = Path(run_dir)
     tsv = run_dir / "data.tsv"
     _write_tsv(tsv, header, rows)
@@ -51,7 +51,7 @@ def _run_tsv_import(db_path: str, header, rows, columns, workbook: str, run_dir:
     return int(result["rows"])
 
 
-def _query(db_path: str, sql: str, params=None):
+def _fetch_all(db_path: str, sql: str, params=None):
     con = duckdb.connect(db_path)
     try:
         return con.execute(sql, params or []).fetchall(), [d[0] for d in con.description]
@@ -59,19 +59,22 @@ def _query(db_path: str, sql: str, params=None):
         con.close()
 
 
+def _prepare_and_run(header, rows, workbook: str, run_dir: Path) -> int:
+    columns = infer_columns(header, [list(r) for r in rows])
+    data = [list(r) for r in rows]
+    return _run_tsv_import(header, data, columns, workbook, run_dir)
+
+
 def import_table(db_path: str, source: dict, workbook: str, run_dir: Path) -> int:
-    rows, _ = _query(db_path, build_import_sql(source))
-    columns = infer_columns(source["columns"], [list(r) for r in rows])
-    header = [c["name"] for c in columns]
-    data = [[r[i] for i in range(len(header))] for r in rows]
-    return _run_tsv_import(db_path, header, data, columns, workbook, run_dir)
+    rows, _ = _fetch_all(db_path, build_import_sql(source))
+    return _prepare_and_run(source["columns"], rows, workbook, run_dir)
 
 
 def import_query(db_path: str, source: dict, workbook: str, run_dir: Path) -> int:
     sql = source["sql"].rstrip().rstrip(";")
-    limit = "" if source.get("limit") is None else f" LIMIT {source['limit']}"
-    rows, keys = _query(db_path, f"SELECT * FROM ({sql}) AS q{limit}", source.get("params"))
-    header = source.get("columns") or keys
-    columns = infer_columns(header, [list(r) for r in rows])
-    data = [[r[i] for i in range(len(header))] for r in rows]
-    return _run_tsv_import(db_path, header, data, columns, workbook, run_dir)
+    limit = source.get("limit")
+    if limit is not None and (not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0):
+        raise ValueError(f"import_query: limit must be a positive integer (got {limit})")
+    limit_clause = "" if limit is None else f" LIMIT {limit}"
+    rows, keys = _fetch_all(db_path, f"SELECT * FROM ({sql}) AS sub{limit_clause}", source.get("params"))
+    return _prepare_and_run(source.get("columns") or keys, rows, workbook, run_dir)
