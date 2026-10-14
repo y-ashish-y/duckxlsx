@@ -83,6 +83,13 @@ export class WasmEngine implements Engine {
     await conn.query("ATTACH 'picked.duckdb' AS picked;");
   }
 
+  private async finishConnect(db: duckdb.AsyncDuckDB, name: string): Promise<Connection> {
+    this.conn = await db.connect();
+    await this.attach(this.conn);
+    localStorage.setItem(NAME_KEY, name);
+    return { name };
+  }
+
   async connectWithPicker(): Promise<Connection> {
     const [handle] = await showOpenFilePicker({
       types: [{ description: "DuckDB database", accept: { "application/octet-stream": [".duckdb", ".db"] } }],
@@ -91,19 +98,13 @@ export class WasmEngine implements Engine {
     const db = await this.ensureDb();
     await db.registerFileHandle("picked.duckdb", handle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
     await storeHandle(handle);
-    this.conn = await db.connect();
-    await this.attach(this.conn);
-    localStorage.setItem(NAME_KEY, handle.name);
-    return { name: handle.name };
+    return this.finishConnect(db, handle.name);
   }
 
   async connectWithFile(picked: File): Promise<Connection> {
     const db = await this.ensureDb();
     await db.registerFileBuffer("picked.duckdb", new Uint8Array(await picked.arrayBuffer()));
-    this.conn = await db.connect();
-    await this.attach(this.conn);
-    localStorage.setItem(NAME_KEY, picked.name);
-    return { name: picked.name };
+    return this.finishConnect(db, picked.name);
   }
 
   async restore(): Promise<Connection | null> {
@@ -111,12 +112,10 @@ export class WasmEngine implements Engine {
     if (!name) return null;
     const handle = await loadHandle();
     if (!handle) return null;
-    if ((await handle.queryPermission({ mode: "readwrite" })) !== "granted") return { name };
+    if ((await handle.queryPermission({ mode: "readwrite" })) !== "granted") return null;
     const db = await this.ensureDb();
     await db.registerFileHandle("picked.duckdb", handle, duckdb.DuckDBDataProtocol.BROWSER_FSACCESS, true);
-    this.conn = await db.connect();
-    await this.attach(this.conn);
-    return { name };
+    return this.finishConnect(db, name);
   }
 
   async query<T = Record<string, unknown>>(sql: string): Promise<T[]> {

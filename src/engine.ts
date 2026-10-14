@@ -7,8 +7,10 @@ export interface Engine {
 
 // ponytail: native binding for tests/dev; taskpane uses WasmEngine (same SQL) — see src/wasm-engine.ts
 export class NodeEngine implements Engine {
-  private db = new Database(this.path);
-  constructor(private path: string) {}
+  private db: Database;
+  constructor(private path: string) {
+    this.db = new Database(path);
+  }
 
   query<T = Record<string, unknown>>(sql: string): Promise<T[]> {
     return new Promise((resolve, reject) => {

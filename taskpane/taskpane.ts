@@ -10,53 +10,54 @@ async function renderCatalog(): Promise<void> {
   const schemas = await browse(engine);
   catalog.innerHTML = "";
   for (const schema of schemas) {
-    const s = document.createElement("li");
-    s.textContent = schema.name;
-    const tables = document.createElement("ul");
+    const schemaItem = document.createElement("li");
+    schemaItem.textContent = schema.name;
+    const tableList = document.createElement("ul");
     for (const table of schema.tables) {
-      const t = document.createElement("li");
-      t.textContent = `${table.name} (${table.columns.map((c) => c.name).join(", ")})`;
-      tables.appendChild(t);
+      const tableItem = document.createElement("li");
+      tableItem.textContent = `${table.name} (${table.columns.map((c) => c.name).join(", ")})`;
+      tableList.appendChild(tableItem);
     }
-    s.appendChild(tables);
-    catalog.appendChild(s);
+    schemaItem.appendChild(tableList);
+    catalog.appendChild(schemaItem);
   }
 }
 
-async function connect(name: string): Promise<void> {
+async function showConnected(name: string): Promise<void> {
   status.textContent = `Connected: ${name}`;
   await renderCatalog();
 }
 
-document.querySelector("#connect")!.addEventListener("click", async () => {
+function fail(err: unknown): void {
+  status.textContent = `Connect failed: ${(err as Error).message}`;
+}
+
+async function pickAndConnect(): Promise<void> {
   try {
-    if (typeof showOpenFilePicker === "function") await connect((await engine.connectWithPicker()).name);
+    if (typeof showOpenFilePicker === "function") showConnected((await engine.connectWithPicker()).name);
     else fileInput.click();
   } catch (err) {
-    status.textContent = `Connect failed: ${(err as Error).message}`;
+    fail(err);
   }
-});
+}
 
-document.querySelector("#switch")!.addEventListener("click", () => {
-  if (typeof showOpenFilePicker === "function") {
-    (document.querySelector("#connect") as HTMLButtonElement).click();
-  } else fileInput.click();
-});
+document.querySelector("#connect")!.addEventListener("click", pickAndConnect);
+document.querySelector("#switch")!.addEventListener("click", pickAndConnect);
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
   if (!file) return;
   try {
-    await connect((await engine.connectWithFile(file)).name);
+    await showConnected((await engine.connectWithFile(file)).name);
   } catch (err) {
-    status.textContent = `Connect failed: ${(err as Error).message}`;
+    fail(err);
   }
 });
 
 Office.onReady(async () => {
   try {
     const restored = await engine.restore();
-    if (restored) await connect(restored.name);
+    if (restored) await showConnected(restored.name);
     else status.textContent = "Pick a local .duckdb file to begin.";
   } catch {
     status.textContent = "Pick a local .duckdb file to begin.";
