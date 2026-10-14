@@ -1,7 +1,7 @@
 import { Database } from "duckdb";
 
 export interface Engine {
-  query<T = Record<string, unknown>>(sql: string): Promise<T[]>;
+  query<T = Record<string, unknown>>(sql: string, ...params: unknown[]): Promise<T[]>;
   close(): Promise<void>;
 }
 
@@ -12,9 +12,9 @@ export class NodeEngine implements Engine {
     this.db = new Database(path);
   }
 
-  query<T = Record<string, unknown>>(sql: string): Promise<T[]> {
+  query<T = Record<string, unknown>>(sql: string, ...params: unknown[]): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      this.db.all(sql, (err, rows) => (err ? reject(err) : resolve(rows as T[])));
+      this.db.all(sql, ...params, (err, rows) => (err ? reject(err) : resolve(rows as T[])));
     });
   }
 
