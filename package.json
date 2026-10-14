@@ -29,5 +29,8 @@
     "url": "https://github.com/y-ashish-y/duckxlsx/issues"
   },
   "homepage": "https://github.com/y-ashish-y/duckxlsx#readme",
-  "type": "module"
+  "type": "module",
+  "bin": {
+    "duckxlsx": "./dist-cli/cli.cjs"
+  }
 }

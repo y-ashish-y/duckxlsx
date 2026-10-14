@@ -2,3 +2,5 @@ node_modules/
 dist/
 fixtures/bridge-smoke.xlsx
 fixtures/import-smoke.xlsx
+fixtures/tmp/
+dist-cli/
