@@ -10,6 +10,8 @@ import {
   type ColumnOverrides,
   type ColumnType,
 } from "../src/export-mapping.js";
+import { buildImportSql } from "../src/import-sql.js";
+import { SavedImportStore, type SavedImport } from "../src/saved-imports.js";
 import { WasmEngine } from "../src/wasm-engine.js";
 
 const COLUMN_TYPES: ColumnType[] = ["INTEGER", "DOUBLE", "BOOLEAN", "TIMESTAMP", "VARCHAR"];
@@ -33,7 +35,10 @@ async function renderCatalog(): Promise<void> {
     const tableList = document.createElement("ul");
     for (const table of schema.tables) {
       const tableItem = document.createElement("li");
-      tableItem.textContent = `${table.name} (${table.columns.map((c) => c.name).join(", ")})`;
+      const pick = document.createElement("button");
+      pick.textContent = `${table.name} (${table.columns.map((c) => c.name).join(", ")})`;
+      pick.addEventListener("click", () => selectTable(schema.name, table.name, table.columns.map((c) => c.name)));
+      tableItem.appendChild(pick);
       tableList.appendChild(tableItem);
     }
     schemaItem.appendChild(tableList);
@@ -41,9 +46,137 @@ async function renderCatalog(): Promise<void> {
   }
 }
 
+const savedStore = new SavedImportStore(localStorage);
+let selected: { schema: string; table: string } | null = null;
+
+const importSource = document.querySelector("#import-source")!;
+const importColumns = document.querySelector("#import-columns")!;
+const importName = document.querySelector<HTMLInputElement>("#import-name")!;
+const importLimit = document.querySelector<HTMLInputElement>("#import-limit")!;
+const importNewSheet = document.querySelector<HTMLInputElement>("#import-new-sheet")!;
+const importPreviewList = document.querySelector("#import-preview-list")!;
+const savedList = document.querySelector("#saved-imports")!;
+
+function selectTable(schema: string, table: string, columns: string[]): void {
+  selected = { schema, table };
+  importSource.textContent = `${schema}.${table}`;
+  importColumns.innerHTML = "";
+  for (const col of columns) {
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = true;
+    box.value = col;
+    box.className = "import-col";
+    label.append(box, col);
+    importColumns.appendChild(label);
+  }
+  if (!importName.value) importName.value = table;
+}
+
+function checkedColumns(): string[] {
+  return [...importColumns.querySelectorAll<HTMLInputElement>(".import-col")]
+    .filter((b) => b.checked)
+    .map((b) => b.value);
+}
+
+function selectedLimit(): number | undefined {
+  const n = Number(importLimit.value);
+  return importLimit.value.trim() === "" || !Number.isInteger(n) || n <= 0 ? undefined : n;
+}
+
+async function runImport(imp: Omit<SavedImport, "name"> & { name?: string }): Promise<void> {
+  const sql = buildImportSql(imp.schema, imp.table, imp.columns, imp.limit);
+  const rows = await engine.query<Record<string, unknown>>(sql);
+  const values = rows.map((r) => imp.columns.map((c) => (r[c] as CellValue) ?? null));
+  await Excel.run(async (ctx) => {
+    const sheet = importNewSheet.checked
+      ? ctx.workbook.worksheets.add(imp.name ?? imp.table)
+      : ctx.workbook.worksheets.getActiveWorksheet();
+    const dest = importNewSheet.checked
+      ? sheet.getRange("A1").getResizedRange(values.length, imp.columns.length - 1)
+      : ctx.workbook.getSelectedRange().getResizedRange(values.length, imp.columns.length - 1);
+    dest.values = [imp.columns, ...values];
+    sheet.tables.add(dest, true);
+    await ctx.sync();
+  });
+  renderSaved();
+  status.textContent = `Imported ${rows.length} rows${imp.name ? ` as ${imp.name}` : ""}.`;
+}
+
+function renderSaved(): void {
+  savedList.innerHTML = "";
+  for (const imp of savedStore.list()) {
+    const item = document.createElement("li");
+    const rerun = document.createElement("button");
+    rerun.textContent = imp.name;
+    rerun.addEventListener("click", () => {
+      selected = { schema: imp.schema, table: imp.table };
+      runImport(imp).catch(fail);
+    });
+    const remove = document.createElement("button");
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      savedStore.remove(imp.name);
+      renderSaved();
+    });
+    item.append(rerun, remove);
+    savedList.appendChild(item);
+  }
+}
+
+document.querySelector("#import-preview")!.addEventListener("click", async () => {
+  if (!selected) {
+    status.textContent = "Pick a table above first.";
+    return;
+  }
+  try {
+    const rows = await engine.query<Record<string, unknown>>(
+      buildImportSql(selected.schema, selected.table, checkedColumns(), 5),
+    );
+    importPreviewList.innerHTML = "";
+    for (const row of rows) {
+      const item = document.createElement("li");
+      item.textContent = JSON.stringify(row);
+      importPreviewList.appendChild(item);
+    }
+    status.textContent = `${rows.length} preview rows.`;
+  } catch (err) {
+    fail(err);
+  }
+});
+
+async function commitImport(persist: boolean): Promise<void> {
+  if (!selected) {
+    status.textContent = "Pick a table above first.";
+    return;
+  }
+  const columns = checkedColumns();
+  if (columns.length === 0) {
+    status.textContent = "Check at least one column.";
+    return;
+  }
+  const imp = { schema: selected.schema, table: selected.table, columns, limit: selectedLimit() };
+  try {
+    if (persist) {
+      const name = importName.value.trim() || selected.table;
+      savedStore.save({ ...imp, name });
+      await runImport({ ...imp, name });
+    } else {
+      await runImport(imp);
+    }
+  } catch (err) {
+    fail(err);
+  }
+}
+
+document.querySelector("#import-save")!.addEventListener("click", () => commitImport(true));
+document.querySelector("#import-once")!.addEventListener("click", () => commitImport(false));
+
 async function showConnected(name: string): Promise<void> {
   status.textContent = `Connected: ${name}`;
   await renderCatalog();
+  renderSaved();
 }
 
 function fail(err: unknown): void {

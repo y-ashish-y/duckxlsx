@@ -13,6 +13,18 @@
     <button id="switch">Switch file</button>
     <h2>Catalog</h2>
     <ul id="catalog"></ul>
+    <h2>Import</h2>
+    <p id="import-source">Pick a table above.</p>
+    <div id="import-columns"></div>
+    <input id="import-name" placeholder="import name" />
+    <input id="import-limit" type="number" placeholder="row limit (blank = all)" />
+    <label><input id="import-new-sheet" type="checkbox" checked /> new sheet (else current selection)</label>
+    <button id="import-preview">Preview</button>
+    <button id="import-save">Save and import</button>
+    <button id="import-once">Import results</button>
+    <ul id="import-preview-list"></ul>
+    <h2>Saved imports</h2>
+    <ul id="saved-imports"></ul>
     <h2>Export</h2>
     <input id="export-table" placeholder="table name" />
     <label><input id="export-headers" type="checkbox" checked /> first row is headers</label>
