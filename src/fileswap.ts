@@ -9,10 +9,6 @@ const quoteString = (value: string): string => `'${value.replace(/'/g, "''")}'`;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-async function ensureExcelExt(engine: Engine): Promise<void> {
-  await engine.query("INSTALL excel; LOAD excel;");
-}
-
 // The excel extension can resolve COPY before the bytes hit disk.
 // Poll for a complete zip (EOCD marker + stable size); throw, never
 // hand back a truncated file.
@@ -50,8 +46,9 @@ export async function exportFile(
   xlsxPath: string,
 ): Promise<void> {
   const helper = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "copy-xlsx.mjs");
+  const sql = `COPY (SELECT * FROM ${quoteIdent(source.schema)}.${quoteIdent(source.table)}) TO ${quoteString(xlsxPath)} WITH (FORMAT xlsx, HEADER true);`;
   await new Promise<void>((resolve, reject) => {
-    execFile(process.execPath, [helper, dbPath, source.schema, source.table, xlsxPath], (err, _stdout, stderr) => {
+    execFile(process.execPath, [helper, dbPath, sql], (err, _stdout, stderr) => {
       if (err) reject(new Error(`exportFile: copy failed: ${stderr || err.message}`));
       else resolve();
     });
@@ -61,12 +58,56 @@ export async function exportFile(
 
 // Returns the imported data row count.
 export async function importFile(engine: Engine, xlsxPath: string, table: string): Promise<number> {
-  await ensureExcelExt(engine);
+  const { rows } = await importFileChecked(engine, xlsxPath, table);
+  return rows;
+}
+
+export interface ImportResult {
+  rows: number;
+  warnings: string[];
+}
+
+// Lossy-edge surfacing: `gridcraft-cli info` reports charts/images/shapes
+// that file-swap does not carry. Detected objects become warnings —
+// documented in docs/file-swap.md and returned, never silently dropped.
+// Pass cliPath to enable detection; without it warnings are [].
+export async function inspectLossy(cliPath: string, xlsxPath: string): Promise<string[]> {
+  const info = await new Promise<{ sheets?: { name?: string; charts?: unknown[]; images?: number; shapes?: number }[] }>(
+    (resolve, reject) => {
+      execFile(cliPath, ["info", xlsxPath, "--json"], (err, stdout, stderr) => {
+        if (err) reject(new Error(`inspect: ${stderr || err.message}`));
+        else {
+          try {
+            resolve(JSON.parse(stdout) as { sheets?: [] });
+          } catch (parseErr) {
+            reject(parseErr as Error);
+          }
+        }
+      });
+    },
+  );
+  const warnings: string[] = [];
+  for (const sheet of info.sheets ?? []) {
+    const found: string[] = [];
+    if ((sheet.charts?.length ?? 0) > 0) found.push(`${sheet.charts!.length} chart(s)`);
+    if ((sheet.images ?? 0) > 0) found.push(`${sheet.images} image(s)`);
+    if ((sheet.shapes ?? 0) > 0) found.push(`${sheet.shapes} shape(s)`);
+    if (found.length > 0) warnings.push(`sheet ${sheet.name ?? "?"} carries file-swap lossy objects: ${found.join(", ")}`);
+  }
+  return warnings;
+}
+
+export async function importFileChecked(
+  engine: Engine,
+  xlsxPath: string,
+  table: string,
+  cliPath?: string,
+): Promise<ImportResult> {
+  await engine.query("INSTALL excel; LOAD excel;");
   await engine.query(
     `CREATE OR REPLACE TABLE ${quoteIdent(table)} AS SELECT * FROM read_xlsx(${quoteString(xlsxPath)}, header = true);`,
   );
-  const count = await engine.query<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM ${quoteIdent(table)};`,
-  );
-  return Number(count[0].n);
+  const count = await engine.query<{ n: number }>(`SELECT COUNT(*) AS n FROM ${quoteIdent(table)};`);
+  const warnings = cliPath ? await inspectLossy(cliPath, xlsxPath) : [];
+  return { rows: Number(count[0].n), warnings };
 }

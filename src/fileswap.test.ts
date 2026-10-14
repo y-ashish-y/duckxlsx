@@ -4,9 +4,9 @@ import { existsSync, statSync } from "fs";
 import { NodeEngine } from "./engine.js";
 import { GridCraftBridge } from "./bridge.js";
 import { binaryPath, tmpPath } from "./test-helper.js";
-import { exportFile, importFile } from "./fileswap.js";
+import { exportFile, importFile, importFileChecked } from "./fileswap.js";
 
-const queryFile = (dbPath: string, sql: string): Promise<unknown[]> =>
+const queryDbViaChild = (dbPath: string, sql: string): Promise<unknown[]> =>
   new Promise((resolve, reject) => {
     execFile(
       process.execPath,
@@ -21,8 +21,8 @@ describe("fileswap", () => {
     const dbPath = tmpPath("fs.duckdb");
     // Seed via child: this process must never open the file itself,
     // or node-duckdb's lifetime file lock blocks the export child.
-    await queryFile(dbPath, "CREATE TABLE t(id INTEGER, item VARCHAR)");
-    await queryFile(dbPath, "INSERT INTO t VALUES (1, 'Widget'), (2, 'Gadget')");
+    await queryDbViaChild(dbPath, "CREATE TABLE t(id INTEGER, item VARCHAR)");
+    await queryDbViaChild(dbPath, "INSERT INTO t VALUES (1, 'Widget'), (2, 'Gadget')");
     const xlsx = tmpPath("fs-out.xlsx");
 
     await exportFile(dbPath, { schema: "main", table: "t" }, xlsx);
@@ -55,6 +55,27 @@ describe("fileswap", () => {
 
     expect(await importFile(engine, xlsx, "imported")).toBe(1);
     expect(await engine.query("SELECT id, item FROM imported")).toEqual([{ id: 1, item: "Widget" }]);
+    await engine.close();
+  });
+
+  it("warns on lossy objects instead of dropping them silently", async () => {
+    const dbPath = tmpPath("fs3.duckdb");
+    const engine = new NodeEngine(dbPath);
+    const bridge = new GridCraftBridge(binaryPath());
+    await bridge.start();
+    await bridge.newWorkbook();
+    await bridge.writeRange("A1", [
+      ["id", "item"],
+      [1, "Widget"],
+    ]);
+    await bridge.executeCommand("insert.chart", { range: "A1:B2", type: "column" });
+    const xlsx = tmpPath("fs-chart.xlsx");
+    await bridge.saveWorkbook(xlsx);
+    await bridge.close();
+
+    const result = await importFileChecked(engine, xlsx, "charted", binaryPath());
+    expect(result.rows).toBe(1);
+    expect(result.warnings).toEqual([expect.stringContaining("chart")]);
     await engine.close();
   });
 });
