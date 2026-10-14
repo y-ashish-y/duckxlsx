@@ -1,0 +1,38 @@
+{
+  "name": "duckxlsx",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/y-ashish-y/duckxlsx.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/y-ashish-y/duckxlsx/issues"
+  },
+  "homepage": "https://github.com/y-ashish-y/duckxlsx#readme",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/office-js": "^1.0.612",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
+    "duckdb": "^1.4.4"
+  },
+  "type": "module"
+}

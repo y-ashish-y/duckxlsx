@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="TaskPaneApp">
+  <Id>3f6a7c2e-1d4b-4a5e-9c8f-duckxlsx000001</Id>
+  <Version>0.1.0</Version>
+  <ProviderName>duckxlsx</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="duckxlsx — local DuckDB in Excel" />
+  <Description DefaultValue="Import and export sheet data to a local DuckDB file, no server." />
+  <Hosts><Host Name="Workbook" /></Hosts>
+  <Requirements><Sets><Set Name="SharedRuntime" MinVersion="1.1" /></Sets></Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3000/" />
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>
