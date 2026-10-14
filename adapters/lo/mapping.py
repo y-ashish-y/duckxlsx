@@ -42,10 +42,14 @@ def _format_literal(value: Any, type_: str) -> str:
         return "NULL"
     if type_ == "BOOLEAN":
         return "TRUE" if value else "FALSE"
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
+    if type_ == "TIMESTAMP":
+        if isinstance(value, datetime):
+            return quote_string(value.isoformat(sep=" ", timespec="seconds"))
+        if isinstance(value, date):
+            return quote_string(value.isoformat())
+        return quote_string(str(value))
+    if type_ in ("INTEGER", "DOUBLE") and isinstance(value, (int, float)) and not isinstance(value, bool):
         return str(value)
-    if isinstance(value, (datetime, date)):
-        return quote_string(value.isoformat(sep=" ", timespec="seconds"))
     return quote_string(str(value))
 
 
