@@ -48,7 +48,19 @@ describe("parseArgs", () => {
   });
 
   it("parses export and host", () => {
-    expect(parseArgs(["export", "--workbook", "s.xlsx", "--range", "A1:B3", "--table", "t", "--db", "s.duckdb"])).toEqual({
+    const exportArgv = (range: string, extra: string[] = []) => [
+      "export",
+      "--workbook",
+      "s.xlsx",
+      "--range",
+      range,
+      "--table",
+      "t",
+      "--db",
+      "s.duckdb",
+      ...extra,
+    ];
+    expect(parseArgs(exportArgv("A1:B3"))).toEqual({
       command: "export",
       workbook: "s.xlsx",
       range: "A1:B3",
@@ -58,7 +70,7 @@ describe("parseArgs", () => {
       mode: "create",
     });
     expect(
-      parseArgs(["export", "--workbook", "s.xlsx", "--range", "A1", "--table", "t", "--db", "s.duckdb", "--no-header", "--overwrite"]),
+      parseArgs(exportArgv("A1", ["--no-header", "--overwrite"])),
     ).toEqual({
       command: "export",
       workbook: "s.xlsx",
