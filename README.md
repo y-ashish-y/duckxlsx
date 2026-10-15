@@ -1,10 +1,10 @@
 # duckxlsx 📊 — DuckDB in, spreadsheet out.
 
-[![Node](https://img.shields.io/node/v/duckxlsx?style=flat-square)](https://nodejs.org/) [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://www.python.org/) [![License](https://img.shields.io/badge/license-ISC-green?style=flat-square)](#license)
+[![Node](https://img.shields.io/badge/node-22%2B-green?style=flat-square)](https://nodejs.org/) [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://www.python.org/) [![License](https://img.shields.io/badge/license-ISC-green?style=flat-square)](#license)
 
 duckxlsx bridges spreadsheets and DuckDB: import query results into sheets, export sheet work back to tables. No server, no warehouse — a `.duckdb` file on your machine. Works from the Node.js CLI (GridCraft) or headless LibreOffice (Calc).
 
-[![System architecture](docs/diagrams/architecture.html)](docs/diagrams/architecture.html)
+[![System architecture](docs/diagrams/architecture.svg)](docs/diagrams/architecture.html)
 
 ```
 $ duckxlsx save --name orders --db shop.duckdb --table main.orders --workbook shop.xlsx --range A1
@@ -56,7 +56,7 @@ The default `save` pins the column selection; `run` refreshes the bound range fr
 
 Use `--limit` to cap preview rows, `--header`/`header:false` for headerless ranges, and `run` for refresh-after-edit. The [GridCraft bulk-path rules](docs/file-swap.md) document the file-exchange constraints.
 
-[![Deployment](docs/diagrams/deployment.html)](docs/diagrams/deployment.html)
+[![Deployment](docs/diagrams/deployment.svg)](docs/diagrams/deployment.html)
 
 ## GridCraft adapter
 
