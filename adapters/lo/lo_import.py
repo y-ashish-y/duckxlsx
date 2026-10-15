@@ -30,7 +30,7 @@ def _write_tsv(path: Path, header, rows) -> None:
             writer.writerow([format_tsv_cell(v) for v in row])
 
 
-def _run_tsv_import(header, rows, columns, workbook: str, run_dir: Path) -> int:
+def _run_tsv_import(header, rows, columns, workbook: str, run_dir: Path, profile_dir=None) -> int:
     run_dir = Path(run_dir)
     tsv = run_dir / "data.tsv"
     _write_tsv(tsv, header, rows)
@@ -47,7 +47,7 @@ def _run_tsv_import(header, rows, columns, workbook: str, run_dir: Path) -> int:
             "tsv": str(tsv),
         },
     )
-    result = run_op(run_dir)
+    result = run_op(run_dir, profile_dir)
     return int(result["rows"])
 
 
@@ -59,18 +59,18 @@ def _fetch_all(db_path: str, sql: str, params=None):
         con.close()
 
 
-def _prepare_and_run(header, rows, workbook: str, run_dir: Path) -> int:
+def _prepare_and_run(header, rows, workbook: str, run_dir: Path, profile_dir=None) -> int:
     columns = infer_columns(header, [list(r) for r in rows])
     data = [list(r) for r in rows]
-    return _run_tsv_import(header, data, columns, workbook, run_dir)
+    return _run_tsv_import(header, data, columns, workbook, run_dir, profile_dir)
 
 
-def import_table(db_path: str, source: dict, workbook: str, run_dir: Path) -> int:
+def import_table(db_path: str, source: dict, workbook: str, run_dir: Path, profile_dir=None) -> int:
     rows, _ = _fetch_all(db_path, build_import_sql(source))
-    return _prepare_and_run(source["columns"], rows, workbook, run_dir)
+    return _prepare_and_run(source["columns"], rows, workbook, run_dir, profile_dir)
 
 
-def import_query(db_path: str, source: dict, workbook: str, run_dir: Path) -> int:
+def import_query(db_path: str, source: dict, workbook: str, run_dir: Path, profile_dir=None) -> int:
     sql = source["sql"].rstrip().rstrip(";")
     limit = source.get("limit")
     if limit is not None and (not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0):

@@ -24,6 +24,13 @@ XLB_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 {elements}</library:library>
 """
 
+XLC_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE library:libraries PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "libraries.dtd">
+<library:libraries xmlns:library="http://openoffice.org/2000/library" xmlns:xlink="http://www.w3.org/1999/xlink">
+ <library:library library:name="Standard" library:link="false"/>
+</library:libraries>
+"""
+
 
 def _merge_xlb(standard_dir: Path):
     """Byte-preserving merge: ElementTree would rewrite the library: prefixes
@@ -52,6 +59,9 @@ def deploy(profile: Path) -> Path:
         )
     shutil.copy2(DRIVER_DIR / MODULE_FILE, standard / MODULE_FILE)
     _merge_xlb(standard)
+    xlc = standard.parent / "script.xlc"
+    if not xlc.exists():
+        xlc.write_text(XLC_TEMPLATE, encoding="utf-8")
     return standard / MODULE_FILE
 
 
@@ -61,6 +71,26 @@ def setup_deployed() -> list:
     if not profiles:
         raise RuntimeError("no LibreOffice user profile found")
     return [deploy(p) for p in profiles]
+
+
+def bootstrap(installation: Path) -> None:
+    """Force LibreOffice to initialize a bare UserInstallation dir. LO
+    regenerates its Basic catalog on first boot, wiping predeployed
+    libraries — so this runs BEFORE deploy(), never after."""
+    import subprocess
+
+    seed = installation / "bootstrap.txt"
+    seed.write_text("bootstrap\n")
+    subprocess.run(
+        [
+            "flatpak", "run", "org.libreoffice.LibreOffice",
+            f"-env:UserInstallation=file://{installation}",
+            "--headless", "--norestore",
+            "--convert-to", "pdf", "--outdir", str(installation), str(seed),
+        ],
+        capture_output=True,
+        timeout=180,
+    )
 
 
 if __name__ == "__main__":

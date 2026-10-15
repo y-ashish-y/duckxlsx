@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="DuckXlsx" script:language="StarBasic">Sub Run
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="DuckXlsx" script:language="StarBasic">Global g_rows As String
+Global g_types As String
+Global g_doc As Object
+Global g_hasDoc As Boolean
+Sub Run
 On Error Goto Handler
 Dim rundir As String, op As Object
 rundir = Environ("DUCKXLSX_RUNDIR")
@@ -8,13 +12,21 @@ If rundir = "" Then Error 1000
 op = ReadIni(rundir &amp; "/op.ini")
 If op("op") = "write-range" Then
 WriteRange op
+ElseIf op("op") = "read-range" Then
+ReadRange op
 Else
 Error 1001
 End If
-WriteResult rundir, "ok", op("__rows"), ""
+WriteResult rundir, "ok", g_rows, "", g_types
 Exit Sub
 Handler:
-WriteResult Environ("DUCKXLSX_RUNDIR"), "error", "", Err &amp; " " &amp; Error$
+If g_hasDoc Then
+On Error Resume Next
+g_doc.close(True)
+g_hasDoc = False
+g_hasDoc = False
+End If
+WriteResult Environ("DUCKXLSX_RUNDIR"), "error", "", Err &amp; " " &amp; Error$, ""
 End Sub
 
 Function ReadIni(path As String) As Object
@@ -33,22 +45,23 @@ Close #f
 ReadIni = map
 End Function
 
-Sub WriteResult(rundir As String, status As String, rows As String, message As String)
+Sub WriteResult(rundir As String, status As String, rows As String, message As String, types As String)
 Dim f As Integer
 f = FreeFile
 Open rundir &amp; "/result.ini" For Output As #f
 Print #f, "status=" &amp; status
 Print #f, "rows=" &amp; rows
+Print #f, "types=" &amp; types
 Print #f, "message=" &amp; message
 Close #f
 End Sub
 
-Function A1ColRow(cell As String) As Object
+Function A1Cell(ref As String) As Object
 Dim i As Integer, ch As String, letters As String, digits As String
 letters = ""
 digits = ""
-For i = 1 To Len(cell)
-ch = Mid(cell, i, 1)
+For i = 1 To Len(ref)
+ch = Mid(ref, i, 1)
 If (ch &gt;= "A" And ch &lt;= "Z") Or (ch &gt;= "a" And ch &lt;= "z") Then
 letters = letters &amp; UCase(ch)
 Else
@@ -60,7 +73,24 @@ col = 0
 For i = 1 To Len(letters)
 col = col * 26 + (Asc(Mid(letters, i, 1)) - Asc("A") + 1)
 Next i
-A1ColRow = Array(col - 1, CLng(digits) - 1)
+A1Cell = Array(col - 1, CLng(digits) - 1)
+End Function
+
+Function A1ColRow(cell As String) As Object
+A1ColRow = A1Cell(cell)
+End Function
+
+Function A1RangeBounds(addr As String) As Object
+Dim sep As Integer, top As Object, bottom As Object
+sep = InStr(addr, ":")
+If sep = 0 Then
+top = A1Cell(addr)
+A1RangeBounds = Array(top(0), top(1), 1, 1)
+Else
+top = A1Cell(Left(addr, sep - 1))
+bottom = A1Cell(Mid(addr, sep + 1))
+A1RangeBounds = Array(top(0), top(1), bottom(0) - top(0) + 1, bottom(1) - top(1) + 1)
+End If
 End Function
 
 Function TypedValue(text As String, colType As String) As Variant
@@ -115,7 +145,7 @@ Else
 Dim first As Object
 first = records(1)
 Dim default_names() As String
-ReDim tmp(UBound(first)) As String
+ReDim default_names(UBound(first)) As String
 For i = 0 To UBound(first)
 default_names(i) = "col_" &amp; (i + 1)
 Next i
@@ -163,6 +193,133 @@ dest = sheet.getCellRangeByPosition(origin(0), origin(1), origin(0) + ncols - 1,
 dest.setDataArray(full)
 doc.storeAsURL(ConvertToUrl(op("workbook")), Array())
 doc.close(True)
-op.Add CStr(nrows), "__rows"
+g_hasDoc = False
+g_rows = CStr(nrows)
+End Sub
+Function CellText(v As Variant) As String
+If IsEmpty(v) Or IsNull(v) Then
+CellText = ""
+Exit Function
+End If
+Dim vt As Integer
+vt = VarType(v)
+If vt = 11 Then
+If v Then CellText = "TRUE" Else CellText = "FALSE"
+Exit Function
+End If
+If vt = 7 Then
+CellText = Format(v, "yyyy-mm-dd hh:nn:ss")
+Exit Function
+End If
+If vt = 2 Or vt = 3 Or vt = 4 Or vt = 5 Then
+CellText = Replace(CStr(v), ",", ".")
+Exit Function
+End If
+CellText = CStr(v)
+End Function
+
+Function ColumnType(vals As Object) As String
+Dim i As Integer, vt As Integer, seenInt As Boolean, seenDbl As Boolean
+seenInt = False
+seenDbl = False
+For i = 0 To UBound(vals)
+If IsEmpty(vals(i)) Or IsNull(vals(i)) Then
+Else
+vt = VarType(vals(i))
+If vt = 11 Then
+ColumnType = "BOOLEAN"
+Exit Function
+ElseIf vt = 7 Then
+ColumnType = "TIMESTAMP"
+Exit Function
+ElseIf vt = 8 Then
+ColumnType = "VARCHAR"
+Exit Function
+ElseIf vt = 4 Or vt = 5 Then
+seenDbl = True
+ElseIf vt = 2 Or vt = 3 Then
+seenInt = True
+Else
+ColumnType = "VARCHAR"
+Exit Function
+End If
+End If
+Next i
+If seenDbl Then
+ColumnType = "DOUBLE"
+ElseIf seenInt Then
+ColumnType = "INTEGER"
+Else
+ColumnType = "VARCHAR"
+End If
+End Function
+
+Sub ReadRange(op As Object)
+Dim ctx As Object, desktop As Object, doc As Object, sheet As Object
+Dim pos As Object, dest As Object, matrix As Object
+Dim f As Integer, r As Long, j As Integer, ncols As Integer, nrows As Long
+Dim line As String, t As String
+Dim colvals() As Variant
+Dim rowvals As Variant
+ctx = GetDefaultContext()
+desktop = ctx.getServiceManager().createInstanceWithContext("com.sun.star.frame.Desktop", ctx)
+doc = desktop.loadComponentFromURL(ConvertToUrl(op("workbook")), "_blank", 0, Array())
+g_doc = doc
+g_hasDoc = True
+g_doc = doc
+On Error Resume Next
+sheet = doc.Sheets.getByName(op("sheet"))
+If Err &lt;&gt; 0 Then
+sheet = doc.Sheets.getByIndex(0)
+End If
+On Error Goto 0
+pos = A1RangeBounds(op("range"))
+ncols = pos(2)
+nrows = pos(3)
+dest = sheet.getCellRangeByPosition(pos(0), pos(1), pos(0) + ncols - 1, pos(1) + nrows - 1)
+matrix = dest.getDataArray()
+Dim types As String
+types = ""
+Dim firstDataRow As Integer
+firstDataRow = 0
+Dim headerFlag As String
+headerFlag = ""
+On Error Resume Next
+headerFlag = LCase(op("header"))
+On Error Goto 0
+If headerFlag = "true" Then firstDataRow = 1
+For j = 0 To ncols - 1
+Dim k As Integer
+k = 0
+Dim want As Integer
+want = nrows - firstDataRow
+If want &lt; 1 Then want = 1
+ReDim colvals(want - 1) As Variant
+For r = firstDataRow To nrows - 1
+rowvals = matrix(r)
+colvals(k) = rowvals(j)
+k = k + 1
+Next r
+If nrows - firstDataRow &lt; 1 Then colvals(0) = Empty
+If types &lt;&gt; "" Then types = types &amp; ","
+types = types &amp; ColumnType(colvals)
+Next j
+f = FreeFile
+Open op("tsv") For Output As #f
+For r = 0 To nrows - 1
+line = ""
+rowvals = matrix(r)
+For j = 0 To ncols - 1
+If j &gt; 0 Then line = line &amp; Chr(9)
+line = line &amp; CellText(rowvals(j))
+Next j
+Print #f, line
+Next r
+Close #f
+doc.close(True)
+g_hasDoc = False
+g_doc = Nothing
+g_types = types
+g_rows = CStr(nrows)
 End Sub
 </script:module>

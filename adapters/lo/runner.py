@@ -36,28 +36,53 @@ def _soffice() -> list:
     raise MacroError("no LibreOffice found (flatpak org.libreoffice.LibreOffice or soffice)")
 
 
-def run_op(run_dir: Path) -> dict:
+def _soffice_running() -> bool:
+    try:
+        ps = subprocess.run(["pgrep", "-x", "soffice.bin"], capture_output=True, timeout=10)
+        return bool(ps.stdout.strip())
+    except Exception:
+        return False
+
+
+def _run_soffice(cmd: list, env: dict, timeout: int) -> subprocess.CompletedProcess:
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, text=True)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+    except subprocess.TimeoutExpired as e:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        finally:
+            proc.wait()
+        raise MacroError(f"soffice timed out after {timeout}s (whole tree killed)") from e
+
+
+def run_op(run_dir: Path, profile_dir: Path | None = None) -> dict:
     run_dir = Path(run_dir)
+    if _soffice_running():
+        raise MacroError("soffice.bin already running — close LibreOffice (or kill strays) before headless runs")
     env = dict(os.environ)
     env["DUCKXLSX_RUNDIR"] = str(run_dir)
     cmd = _soffice()
     if cmd[0] == "flatpak":
         cmd = cmd[:2] + [f"--env=DUCKXLSX_RUNDIR={run_dir}"] + cmd[2:]
-    try:
-        proc = subprocess.run(
-            cmd + ["--headless", "--norestore", MACRO_URL],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_S,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise MacroError(f"macro run timed out after {TIMEOUT_S}s") from e
+    if profile_dir is not None:
+        # Isolated profile: never touches the user's live LO (locks, Basic
+        # libraries, concurrent GUI sessions).
+        cmd = cmd + [f"-env:UserInstallation=file://{Path(profile_dir)}"]
+    proc = _run_soffice(cmd + ["--headless", "--norestore", MACRO_URL], env, TIMEOUT_S)
     if proc.returncode != 0:
         raise MacroError(f"soffice exited {proc.returncode}: {(proc.stderr or '')[-1000:]}")
     result_file = run_dir / "result.ini"
     if not result_file.exists():
-        raise MacroError("macro produced no result.ini")
+        hint = ""
+        try:
+            ps = subprocess.run(["pgrep", "-x", "soffice.bin"], capture_output=True, text=True, timeout=10)
+            if ps.stdout.strip():
+                hint = " (a stray soffice.bin is running — kill it; it holds the profile lock and swallows macro runs)"
+        except Exception:
+            pass
+        raise MacroError(f"macro produced no result.ini{hint}")
     result = {}
     for line in result_file.read_text().splitlines():
         if "=" in line:
@@ -68,13 +93,17 @@ def run_op(run_dir: Path) -> dict:
     return result
 
 
-def convert_to_csv(workbook: Path, out_csv: Path) -> Path:
+def convert_to_csv(workbook: Path, out_csv: Path, profile_dir: Path | None = None) -> Path:
     out_csv = Path(out_csv)
-    proc = subprocess.run(
-        _soffice() + ["--headless", "--norestore", "--convert-to", "csv", "--outdir", str(out_csv.parent), str(workbook)],
-        capture_output=True,
-        text=True,
-        timeout=TIMEOUT_S,
+    if _soffice_running():
+        raise MacroError("soffice.bin already running — close LibreOffice (or kill strays) before headless runs")
+    cmd = _soffice()
+    if profile_dir is not None:
+        cmd = cmd + [f"-env:UserInstallation=file://{Path(profile_dir)}"]
+    proc = _run_soffice(
+        cmd + ["--headless", "--norestore", "--convert-to", "csv", "--outdir", str(out_csv.parent), str(workbook)],
+        dict(os.environ),
+        TIMEOUT_S,
     )
     if proc.returncode != 0:
         raise MacroError(f"convert-to exited {proc.returncode}: {(proc.stderr or '')[-1000:]}")
