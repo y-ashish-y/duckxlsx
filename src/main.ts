@@ -1,15 +1,51 @@
 import { homedir } from "os";
 import { existsSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { parseArgs, type CliCommand } from "./cli.js";
 import { ImportStore } from "./saved.js";
 import { ensureWorkbook, runSaved, tableColumns } from "./run.js";
+import { GridCraftBridge } from "./bridge.js";
+import { NodeEngine } from "./engine.js";
+import { exportRange } from "./gridcraft-export.js";
+import { startHost } from "./host-server.js";
+
+export interface ExportArgs {
+  workbook: string;
+  range: string;
+  table: string;
+  db: string;
+  header: boolean;
+  mode: "create" | "overwrite";
+  cliPath: string;
+}
+
+export interface HostArgs {
+  port: number;
+  gridcraftDir?: string;
+  gridcraftUrl?: string;
+}
 
 export interface Deps {
   storeFile: string;
   cliPath: string;
   runner?: (store: ImportStore, name: string, cliPath: string) => Promise<number>;
+  exporter?: (args: ExportArgs) => Promise<number>;
+  hostStarter?: (args: HostArgs) => Promise<{ port: number; close: () => Promise<void> }>;
+}
+
+async function defaultExporter(args: ExportArgs): Promise<number> {
+  if (!existsSync(args.workbook)) throw new Error(`workbook not found: ${args.workbook}`);
+  const bridge = new GridCraftBridge(args.cliPath);
+  await bridge.start();
+  const engine = new NodeEngine(args.db);
+  try {
+    await bridge.openWorkbook(resolve(args.workbook));
+    return await exportRange(engine, bridge, { range: args.range, table: args.table, header: args.header, mode: args.mode });
+  } finally {
+    await bridge.close();
+    await engine.close();
+  }
 }
 
 // Returns a process exit code; all failures surface on stderr, never silent.
@@ -18,7 +54,7 @@ export async function dispatch(argv: string[], deps: Deps): Promise<number> {
   try {
     cmd = parseArgs(argv);
   } catch (err) {
-    console.error(`usage: duckxlsx (save --name N --db DB [--table S.T | --sql SQL] --range A1 | run --name N | remove --name N | list)`);
+    console.error(`usage: duckxlsx (save --name N --db DB [--table S.T | --sql SQL] --range A1 | run --name N | remove --name N | list | export --workbook WB --range R --table T --db DB | host [--port P])`);
     console.error((err as Error).message);
     return 2;
   }
@@ -43,6 +79,37 @@ export async function dispatch(argv: string[], deps: Deps): Promise<number> {
     if (cmd.command === "run") {
       const count = await run(store, cmd.name, deps.cliPath);
       console.log(`${cmd.name}: ${count} rows`);
+      return 0;
+    }
+    if (cmd.command === "export") {
+      const exporter = deps.exporter ?? defaultExporter;
+      const count = await exporter({
+        workbook: cmd.workbook,
+        range: cmd.range,
+        table: cmd.table,
+        db: cmd.db,
+        header: cmd.header,
+        mode: cmd.mode,
+        cliPath: deps.cliPath,
+      });
+      console.log(`${cmd.table}: ${count} rows`);
+      return 0;
+    }
+    if (cmd.command === "host") {
+      const starter = deps.hostStarter ?? startHost;
+      const { port, close } = await starter({
+        port: cmd.port,
+        gridcraftDir: cmd.gridcraftDir ?? process.env.GRIDCRAFT_WEB_DIR,
+        gridcraftUrl: cmd.gridcraftUrl ?? process.env.GRIDCRAFT_WEB_URL,
+      });
+      console.log(`duckxlsx host on http://127.0.0.1:${port}`);
+      if (starter === startHost) {
+        await new Promise<void>((resolve) => {
+          const stop = () => void close().finally(() => resolve());
+          process.on("SIGINT", stop);
+          process.on("SIGTERM", stop);
+        });
+      }
       return 0;
     }
     if (!cmd.table && !cmd.sql) {
