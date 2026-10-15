@@ -16,6 +16,14 @@ export interface HostOptions {
 const quoteIdent = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 const MAX_BODY = 256 * 1024 * 1024;
 
+// GridCraft only enters host mode with ?host=parent; without it the frame
+// boots standalone and no postMessage ever fires. Operator URLs get the flag
+// appended rather than silently booting a dead integration.
+function withHostFlag(url: string): string {
+  if (/[?&]host=/.test(url)) return url;
+  return url + (url.includes("?") ? "&" : "?") + "host=parent";
+}
+
 const here = dirname(fileURLToPath(import.meta.url));
 const queryHelper = join(here, "..", "scripts", "query-file.mjs");
 const importHelper = join(here, "..", "scripts", "import-xlsx.mjs");
@@ -43,19 +51,22 @@ async function readBody(req: IncomingMessage, cap = MAX_BODY): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-async function sqlRows(db: string, sql: string): Promise<Record<string, unknown>[]> {
+async function runHelper(script: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(process.execPath, [queryHelper, db, sql], (err, stdout, stderr) => {
+    execFile(process.execPath, [script, ...args], (err, stdout, stderr) => {
       if (err) reject(new Error(stderr.trim() || err.message));
-      else {
-        try {
-          resolve(JSON.parse(stdout) as Record<string, unknown>[]);
-        } catch {
-          reject(new Error(`unparseable query output: ${stdout.slice(0, 200)}`));
-        }
-      }
+      else resolve(stdout);
     });
   });
+}
+
+async function sqlRows(db: string, sql: string): Promise<Record<string, unknown>[]> {
+  const stdout = await runHelper(queryHelper, [db, sql]);
+  try {
+    return JSON.parse(stdout) as Record<string, unknown>[];
+  } catch {
+    throw new Error(`unparseable query output: ${stdout.slice(0, 200)}`);
+  }
 }
 
 async function tableExists(db: string, schema: string, table: string): Promise<boolean> {
@@ -74,8 +85,8 @@ async function listTables(db: string): Promise<{ schema: string; table: string }
   )) as { schema: string; table: string }[];
 }
 
-async function tableCount(db: string, schema: string, table: string): Promise<number> {
-  const rows = await sqlRows(db, `SELECT COUNT(*) AS n FROM ${quoteIdent(schema)}.${quoteIdent(table)};`);
+async function tableCount(db: string, from: string): Promise<number> {
+  const rows = await sqlRows(db, `SELECT COUNT(*) AS n FROM ${from};`);
   return Number((rows[0] as { n: number }).n);
 }
 
@@ -86,19 +97,20 @@ async function exportToTable(db: string, xlsx: Buffer, table: string, mode: stri
   writeFileSync(xlsxPath, xlsx);
   try {
     return await new Promise<number>((resolve, reject) => {
-      execFile(process.execPath, [importHelper, db, table, mode, xlsxPath], (err, stdout, stderr) => {
-        if (err) {
-          const msg = stderr.trim() || err.message;
-          const dup = /already exists/.test(msg);
-          reject(Object.assign(new Error(dup ? `table ${table} already exists` : `export failed: ${msg}`), { status: dup ? 409 : 500 }));
-        } else {
+      runHelper(importHelper, [db, table, mode, xlsxPath]).then(
+        (stdout) => {
           try {
             resolve(Number((JSON.parse(stdout) as { rows: number }).rows));
           } catch {
             reject(new Error(`unparseable import output: ${stdout.slice(0, 200)}`));
           }
-        }
-      });
+        },
+        (err) => {
+          const msg = (err as Error).message;
+          const dup = /already exists/.test(msg);
+          reject(Object.assign(new Error(dup ? `table ${table} already exists` : `export failed: ${msg}`), { status: dup ? 409 : 500 }));
+        },
+      );
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -112,7 +124,7 @@ function safeJoin(root: string, urlPath: string): string | null {
 
 export async function startHost(opts: HostOptions = {}): Promise<{ port: number; close: () => Promise<void> }> {
   const panelDir = opts.panelDir ?? join(dirname(fileURLToPath(import.meta.url)), "..", "host");
-  const gridcraftUrl = opts.gridcraftUrl ?? "/gridcraft/";
+  const gridcraftUrl = withHostFlag(opts.gridcraftUrl ?? "/gridcraft/");
   const server: Server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://localhost");
@@ -135,18 +147,25 @@ export async function startHost(opts: HostOptions = {}): Promise<{ port: number;
         return json(res, 200, await listTables(db));
       }
       if (req.method === "POST" && url.pathname === "/api/import") {
-        const { db, schema, table } = JSON.parse((await readBody(req, 256 * 1024)).toString() || "{}");
-        if (!db || !schema || !table || !existsSync(db)) return json(res, 400, { error: "need {db, schema, table} with a readable db path" });
-        if (!(await tableExists(db, schema, table))) return json(res, 404, { error: `table ${schema}.${table} not found` });
+        const { db, schema, table, sql } = JSON.parse((await readBody(req, 256 * 1024)).toString() || "{}");
+        if (!db || !existsSync(db) || (!sql && (!schema || !table))) {
+          return json(res, 400, { error: "need {db} plus {schema, table} or {sql}" });
+        }
+        const name = table ?? "query";
+        if (!sql && !(await tableExists(db, schema, table))) {
+          return json(res, 404, { error: `table ${schema}.${table} not found` });
+        }
         const dir = mkdtempSync(join(tmpdir(), "duckxlsx-import-"));
         try {
-          const xlsxPath = join(dir, `${table}.xlsx`);
-          await exportFile(db, { schema, table }, xlsxPath);
+          const xlsxPath = join(dir, `${name}.xlsx`);
+          await exportFile(db, sql ? { sql, name } : { schema, table }, xlsxPath);
           const bytes = readFileSync(xlsxPath);
-          const rows = await tableCount(db, schema, table);
+          const rows = sql
+            ? await tableCount(db, `(${sql.replace(/;+\s*$/, "")}) AS sub`)
+            : await tableCount(db, `${quoteIdent(schema)}.${quoteIdent(table)}`);
           return send(res, 200, bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", {
             "x-rows": String(rows),
-            "content-disposition": `attachment; filename="${table}.xlsx"`,
+            "content-disposition": `attachment; filename="${name}.xlsx"`,
           });
         } finally {
           rmSync(dir, { recursive: true, force: true });
