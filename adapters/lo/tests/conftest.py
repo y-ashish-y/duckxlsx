@@ -22,3 +22,15 @@ def home_run_dir() -> Path:
     run_dir = Path.home() / "duckxlsx-io" / "test-runs" / uuid.uuid4().hex
     run_dir.mkdir(parents=True)
     return run_dir
+
+
+def automation_profile() -> Path:
+    """Isolated LO profile (home-visible for the sandbox): driver deployed,
+    never touches the user's live profile, immune to GUI lock contention."""
+    from setup import bootstrap, deploy
+
+    installation = home_run_dir() / "loinstall"
+    installation.mkdir(parents=True)
+    bootstrap(installation)
+    deploy(installation / "user")
+    return installation

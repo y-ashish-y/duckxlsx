@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import lo_available
+from conftest import home_run_dir, lo_available
 from runner import convert_to_csv, run_op, write_op_ini
 from setup import setup_deployed
 

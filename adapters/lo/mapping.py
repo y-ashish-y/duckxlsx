@@ -73,6 +73,18 @@ def infer_columns(header: Optional[list], rows: list, overrides: Optional[dict] 
     return columns
 
 
+def columns_from_names_types(names: list, types: list, overrides: Optional[dict] = None) -> list:
+    """Build column defs from macro-reported names + VarType-derived types."""
+    overrides = overrides or {}
+    columns = []
+    for name, type_ in zip(names, types):
+        override = overrides.get(name, {})
+        if isinstance(override, str):
+            override = {"type": override}
+        columns.append({"name": override.get("name", name), "type": override.get("type", type_)})
+    return columns
+
+
 def create_table_sql(table: str, columns: list, mode: str) -> str:
     or_replace = " OR REPLACE" if mode == "overwrite" else ""
     defs = ", ".join(f"{quote_ident(c['name'])} {c['type']}" for c in columns)
