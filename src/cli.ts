@@ -50,26 +50,29 @@ export function parseArgs(argv: string[]): CliCommand {
       ...(rest.includes("--sql") ? { sql: requireFlagValue(rest, "--sql") } : {}),
     };
   }
-  if (command === "export") {
-    const mode = rest.includes("--overwrite") ? "overwrite" : "create";
-    return {
-      command: "export",
-      workbook: requireFlagValue(rest, "--workbook"),
-      range: requireFlagValue(rest, "--range"),
-      table: requireFlagValue(rest, "--table"),
-      db: requireFlagValue(rest, "--db"),
-      header: !rest.includes("--no-header"),
-      mode,
-    };
-  }
-  if (command === "host") {
-    const port = rest.includes("--port") ? optionalInt(rest, "--port")! : 8766;
-    return {
-      command: "host",
-      port,
-      ...(rest.includes("--gridcraft-dir") ? { gridcraftDir: requireFlagValue(rest, "--gridcraft-dir") } : {}),
-      ...(rest.includes("--gridcraft-url") ? { gridcraftUrl: requireFlagValue(rest, "--gridcraft-url") } : {}),
-    };
-  }
+  if (command === "export") return parseExport(rest);
+  if (command === "host") return parseHost(rest);
   throw new Error(`unknown command "${command}" (save|run|remove|list|export|host)`);
+}
+
+function parseExport(rest: string[]): CliCommand {
+  return {
+    command: "export",
+    workbook: requireFlagValue(rest, "--workbook"),
+    range: requireFlagValue(rest, "--range"),
+    table: requireFlagValue(rest, "--table"),
+    db: requireFlagValue(rest, "--db"),
+    header: !rest.includes("--no-header"),
+    mode: rest.includes("--overwrite") ? "overwrite" : "create",
+  };
+}
+
+function parseHost(rest: string[]): CliCommand {
+  return {
+    command: "host",
+    port: rest.includes("--port") ? optionalInt(rest, "--port")! : 8766,
+    ...(rest.includes("--gridcraft-dir") ? { gridcraftDir: requireFlagValue(rest, "--gridcraft-dir") } : {}),
+    ...(rest.includes("--gridcraft-url") ? { gridcraftUrl: requireFlagValue(rest, "--gridcraft-url") } : {}),
+  };
+}
 }
