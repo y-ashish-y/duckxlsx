@@ -53,6 +53,13 @@ def test_export_creates_table_and_reimports_intact():
             (1, "Widget", 4),
             (2, "Gadget", 2),
         ]
+        import pytest as _pytest
+
+        with _pytest.raises(Exception):
+            export_range(
+                str(db), str(workbook),
+                {"range": "A1:C3", "header": True, "mode": "create", "table": "shop_orders"}, run_dir,
+            )
     finally:
         con.close()
 
@@ -74,10 +81,15 @@ def test_export_overwrites_and_honors_header_off():
     db = run_dir / "exp2.duckdb"
 
     assert export_range(str(db), str(workbook), {"range": "A1:C3", "header": True, "mode": "create", "table": "shop_orders"}, run_dir) == 2
-    assert export_range(str(db), str(workbook), {"range": "A2:C2", "header": False, "mode": "overwrite", "table": "shop_orders"}, run_dir) == 1
+    assert export_range(
+        str(db), str(workbook),
+        {"range": "A2:C2", "header": False, "mode": "overwrite", "table": "shop_orders",
+         "overrides": {"col_1": "VARCHAR", "col_2": {"name": "renamed"}}},
+        run_dir,
+    ) == 1
 
     con = duckdb.connect(str(db))
     try:
-        assert con.execute("SELECT col_1, col_2, col_3 FROM shop_orders").fetchall() == [(1, "Widget", 4)]
+        assert con.execute("SELECT col_1, renamed, col_3 FROM shop_orders").fetchall() == [("1", "Widget", 4)]
     finally:
         con.close()

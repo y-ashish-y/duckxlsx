@@ -44,6 +44,11 @@ def _soffice_running() -> bool:
         return False
 
 
+def ensure_no_stray() -> None:
+    if _soffice_running():
+        raise MacroError("soffice.bin already running — close LibreOffice (or kill strays) before headless runs")
+
+
 def _run_soffice(cmd: list, env: dict, timeout: int) -> subprocess.CompletedProcess:
     proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, text=True)
     try:
@@ -59,8 +64,7 @@ def _run_soffice(cmd: list, env: dict, timeout: int) -> subprocess.CompletedProc
 
 def run_op(run_dir: Path, profile_dir: Path | None = None) -> dict:
     run_dir = Path(run_dir)
-    if _soffice_running():
-        raise MacroError("soffice.bin already running — close LibreOffice (or kill strays) before headless runs")
+    ensure_no_stray()
     env = dict(os.environ)
     env["DUCKXLSX_RUNDIR"] = str(run_dir)
     cmd = _soffice()
@@ -95,8 +99,7 @@ def run_op(run_dir: Path, profile_dir: Path | None = None) -> dict:
 
 def convert_to_csv(workbook: Path, out_csv: Path, profile_dir: Path | None = None) -> Path:
     out_csv = Path(out_csv)
-    if _soffice_running():
-        raise MacroError("soffice.bin already running — close LibreOffice (or kill strays) before headless runs")
+    ensure_no_stray()
     cmd = _soffice()
     if profile_dir is not None:
         cmd = cmd + [f"-env:UserInstallation=file://{Path(profile_dir)}"]

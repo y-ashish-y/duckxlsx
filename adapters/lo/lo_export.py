@@ -5,7 +5,7 @@ from pathlib import Path
 
 import duckdb
 
-from mapping import columns_from_names_types, create_table_sql, insert_sql
+from mapping import coerce_cell, columns_from_names_types, create_table_sql, insert_sql
 from runner import run_op, write_op_ini
 
 
@@ -34,14 +34,15 @@ def export_range(db_path: str, workbook: str, source: dict, run_dir: Path, profi
         data = matrix
     base_types = types if len(types) == len(names) else ["VARCHAR"] * len(names)
     columns = columns_from_names_types(names, base_types, source.get("overrides"))
+    typed = [[coerce_cell(v, columns[i]["type"]) for i, v in enumerate(row)] for row in data]
     con = duckdb.connect(db_path)
     try:
         mode = source.get("mode", "create")
         if mode not in ("create", "overwrite"):
             raise ValueError(f"mode must be create|overwrite (got {mode})")
         con.execute(create_table_sql(source["table"], columns, mode))
-        if data:
-            con.execute(insert_sql(source["table"], columns, data))
-        return len(data)
+        if typed:
+            con.execute(insert_sql(source["table"], columns, typed))
+        return len(typed)
     finally:
         con.close()
