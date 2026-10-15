@@ -17,7 +17,7 @@ ReadRange op
 ElseIf op("op") = "create-pilot" Then
 CreatePilot op
 ElseIf op("op") = "refresh-pilot" Then
-RefreshPilot op
+CreatePilot op
 Else
 Error 1001
 End If
@@ -331,9 +331,9 @@ g_types = types
 g_rows = CStr(nrows)
 End Sub
 
-Function AggFunction(name As String) As Long
+Function AggFunction(agg_name As String) As Long
 Dim n As String
-n = UCase(Trim(name))
+n = UCase(Trim(agg_name))
 If n = "COUNT" Then
 AggFunction = com.sun.star.sheet.GeneralFunction.COUNT
 ElseIf n = "AVERAGE" Then
@@ -342,16 +342,18 @@ ElseIf n = "MIN" Then
 AggFunction = com.sun.star.sheet.GeneralFunction.MIN
 ElseIf n = "MAX" Then
 AggFunction = com.sun.star.sheet.GeneralFunction.MAX
-Else
+ElseIf n = "SUM" Then
 AggFunction = com.sun.star.sheet.GeneralFunction.SUM
+Else
+Error 1004
 End If
 End Function
 
-Function HeaderIndex(sheet As Object, sc0 As Integer, sr0 As Integer, ncols As Integer, want As String) As Integer
+Function HeaderIndex(sheet As Object, pos As Object, header_name As String) As Integer
 Dim hdr As Object, j As Integer
-hdr = sheet.getCellRangeByPosition(sc0, sr0, sc0 + ncols - 1, sr0).getDataArray()(0)
-For j = 0 To ncols - 1
-If CStr(hdr(j)) = want Then
+hdr = sheet.getCellRangeByPosition(pos(0), pos(1), pos(0) + pos(2) - 1, pos(1)).getDataArray()(0)
+For j = 0 To pos(2) - 1
+If CStr(hdr(j)) = header_name Then
 HeaderIndex = j
 Exit Function
 End If
@@ -378,8 +380,8 @@ On Error Goto 0
 pos = A1RangeBounds(op("source"))
 ncols = pos(2)
 nrows = pos(3)
-rf = HeaderIndex(sheet, pos(0), pos(1), ncols, op("row_field"))
-df = HeaderIndex(sheet, pos(0), pos(1), ncols, op("data_field"))
+rf = HeaderIndex(sheet, pos, op("row_field"))
+df = HeaderIndex(sheet, pos, op("data_field"))
 tables = sheet.DataPilotTables
 On Error Resume Next
 tables.removeByName(op("name"))
@@ -398,9 +400,5 @@ doc.close(True)
 g_hasDoc = False
 g_doc = Nothing
 g_rows = "1"
-End Sub
-
-Sub RefreshPilot(op As Object)
-CreatePilot op
 End Sub
 </script:module>
