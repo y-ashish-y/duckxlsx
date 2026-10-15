@@ -40,6 +40,9 @@ Save a named import, then re-run it whenever the data changes:
 node dist-cli/main.js save --name orders --db shop.duckdb \
   --table main.orders --workbook shop.xlsx --range A1
 node dist-cli/main.js run --name orders
+node dist-cli/main.js export --workbook shop.xlsx --range A1:C3 \
+  --table shop_orders --db shop.duckdb          # --overwrite to replace
+GRIDCRAFT_WEB_DIR=/path/to/gridcraft-web node dist-cli/main.js host --port 8766
 ```
 
 The default `save` pins the column selection; `run` refreshes the bound range from current DuckDB data. The five-minute path (custom SQL, limits, export, pilots) is covered per adapter below.
