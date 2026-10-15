@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>duckxlsx — GridCraft host</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font: 14px system-ui, sans-serif; display: flex; height: 100vh; }
+    #panel { width: 320px; min-width: 280px; padding: 12px; overflow-y: auto; border-right: 1px solid #8884; }
+    #panel h1 { font-size: 16px; margin: 0 0 4px; }
+    #panel h2 { font-size: 13px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
+    #panel label { display: block; margin: 6px 0; }
+    #panel input, #panel select { width: 100%; box-sizing: border-box; padding: 4px 6px; }
+    #panel button { width: 100%; padding: 6px; margin-top: 6px; }
+    #panel .row { display: flex; gap: 6px; }
+    #panel .row button { flex: 1; }
+    #status { min-height: 2.5em; font-size: 13px; white-space: pre-wrap; }
+    #dirty { color: #b60; }
+    #framewrap { flex: 1; display: flex; }
+    #gridcraft { flex: 1; border: 0; }
+    #banner { display: none; background: #b00; color: #fff; padding: 8px 12px; }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <h1>duckxlsx 📊</h1>
+    <div id="status" role="status">Starting…</div>
+    <div id="dirty"></div>
+
+    <h2>Connection</h2>
+    <label>DuckDB file <input id="db" placeholder="/home/you/shop.duckdb" /></label>
+    <button id="connect">Connect + list tables</button>
+    <label>Table <select id="tables"></select></label>
+
+    <h2>Import → GridCraft</h2>
+    <p>Opens the table as a workbook in the frame. Save current work first — opening replaces it.</p>
+    <button id="import">Import table to GridCraft</button>
+
+    <h2>Export → DuckDB</h2>
+    <p>Press Save in GridCraft (Ctrl+S), then export the received file:</p>
+    <div id="savedfile">No saved file received yet.</div>
+    <label>Target table <input id="target" placeholder="sheet_data" /></label>
+    <div class="row">
+      <button id="export">Export (create)</button>
+      <button id="overwrite">Overwrite</button>
+    </div>
+  </div>
+  <div id="framewrap">
+    <div id="banner"></div>
+    <iframe id="gridcraft" title="GridCraft spreadsheet" allow="fullscreen; clipboard-read; clipboard-write" allowfullscreen></iframe>
+  </div>
+  <script src="./panel.js"></script>
+</body>
+</html>

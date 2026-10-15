@@ -17,7 +17,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build:cli": "tsc --outDir dist-cli --rootDir src --module nodenext --moduleResolution nodenext --target es2022 --strict --skipLibCheck --esModuleInterop"
+    "build:cli": "tsc --outDir dist-cli --rootDir src --module nodenext --moduleResolution nodenext --target es2022 --strict --skipLibCheck --esModuleInterop",
+    "host": "node dist-cli/host-server.js"
   },
   "repository": {
     "type": "git",

@@ -70,6 +70,17 @@ npm run build:cli   # compiles dist-cli/; bin: duckxlsx
 
 Single-writer rule: DuckDB holds the file lock for the process lifetime, so file-level ops go through short-lived children (`scripts/copy-xlsx.mjs`, `scripts/query-file.mjs`). Verify written files via `open_workbook`, not `cat`.
 
+## GridCraft host page (Excel-style side panel)
+
+No add-in API exists in GridCraft, so the panel lives beside it: a local page embedding the GridCraft web build (`?host=parent` iframe) with a duckxlsx sidebar.
+
+```
+npm run build:cli
+GRIDCRAFT_WEB_DIR=/path/to/gridcraft-web npm run host   # http://127.0.0.1:8766
+```
+
+Unzip a `gridcraft-web-<version>.zip` release into `GRIDCRAFT_WEB_DIR` (same-origin mount at `/gridcraft/` — GridCraft only answers same-origin parents). Import sends a table as xlsx bytes into the frame via `gridcraft:open`; Save in GridCraft hands bytes back (`gridcraft:save`) for export to a table. See issue #29.
+
 ## LibreOffice adapter
 
 The Python controller (`adapters/lo/`: embedded DuckDB + `lo_import.py`, `lo_export.py`, `lo_pilot.py`, `lo_cli.py`) writes TSV + `op.ini` under `~/duckxlsx-io`, invokes headless LibreOffice (`macro:///Standard.DuckXlsx.Run()`), and the Basic driver (`driver/DuckXlsx.xba`) bulk-loads via `setDataArray` / reads via `getDataArray`, reporting back in `result.ini`:
