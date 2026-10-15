@@ -14,6 +14,10 @@ If op("op") = "write-range" Then
 WriteRange op
 ElseIf op("op") = "read-range" Then
 ReadRange op
+ElseIf op("op") = "create-pilot" Then
+CreatePilot op
+ElseIf op("op") = "refresh-pilot" Then
+RefreshPilot op
 Else
 Error 1001
 End If
@@ -176,7 +180,16 @@ For j = 0 To ncols - 1
 full(r + header_rows, j) = matrix(r, j)
 Next j
 Next r
+Dim sfa As Object, wbUrl As String
+sfa = createUnoService("com.sun.star.ucb.SimpleFileAccess")
+wbUrl = ConvertToUrl(op("workbook"))
+If sfa.exists(wbUrl) Then
+doc = desktop.loadComponentFromURL(wbUrl, "_blank", 0, Array())
+Else
 doc = desktop.loadComponentFromURL("private:factory/scalc", "_blank", 0, Array())
+End If
+g_doc = doc
+g_hasDoc = True
 On Error Resume Next
 sheet = doc.Sheets.getByName(op("sheet"))
 If Err &lt;&gt; 0 Then
@@ -316,5 +329,78 @@ g_hasDoc = False
 g_doc = Nothing
 g_types = types
 g_rows = CStr(nrows)
+End Sub
+
+Function AggFunction(name As String) As Long
+Dim n As String
+n = UCase(Trim(name))
+If n = "COUNT" Then
+AggFunction = com.sun.star.sheet.GeneralFunction.COUNT
+ElseIf n = "AVERAGE" Then
+AggFunction = com.sun.star.sheet.GeneralFunction.AVERAGE
+ElseIf n = "MIN" Then
+AggFunction = com.sun.star.sheet.GeneralFunction.MIN
+ElseIf n = "MAX" Then
+AggFunction = com.sun.star.sheet.GeneralFunction.MAX
+Else
+AggFunction = com.sun.star.sheet.GeneralFunction.SUM
+End If
+End Function
+
+Function HeaderIndex(sheet As Object, sc0 As Integer, sr0 As Integer, ncols As Integer, want As String) As Integer
+Dim hdr As Object, j As Integer
+hdr = sheet.getCellRangeByPosition(sc0, sr0, sc0 + ncols - 1, sr0).getDataArray()(0)
+For j = 0 To ncols - 1
+If CStr(hdr(j)) = want Then
+HeaderIndex = j
+Exit Function
+End If
+Next j
+Error 1003
+End Function
+
+Sub CreatePilot(op As Object)
+Dim ctx As Object, desktop As Object, doc As Object, sheet As Object
+Dim pos As Object, tables As Object, desc As Object
+Dim ncols As Integer, nrows As Integer, rf As Integer, df As Integer
+Dim field As Object, out As Object
+ctx = GetDefaultContext()
+desktop = ctx.getServiceManager().createInstanceWithContext("com.sun.star.frame.Desktop", ctx)
+doc = desktop.loadComponentFromURL(ConvertToUrl(op("workbook")), "_blank", 0, Array())
+g_doc = doc
+g_hasDoc = True
+On Error Resume Next
+sheet = doc.Sheets.getByName(op("sheet"))
+If Err &lt;&gt; 0 Then
+sheet = doc.Sheets.getByIndex(0)
+End If
+On Error Goto 0
+pos = A1RangeBounds(op("source"))
+ncols = pos(2)
+nrows = pos(3)
+rf = HeaderIndex(sheet, pos(0), pos(1), ncols, op("row_field"))
+df = HeaderIndex(sheet, pos(0), pos(1), ncols, op("data_field"))
+tables = sheet.DataPilotTables
+On Error Resume Next
+tables.removeByName(op("name"))
+On Error Goto 0
+desc = tables.createDataPilotDescriptor()
+desc.SourceRange = sheet.getCellRangeByPosition(pos(0), pos(1), pos(0) + ncols - 1, pos(1) + nrows - 1).RangeAddress
+field = desc.getDataPilotFields().getByIndex(rf)
+field.Orientation = com.sun.star.sheet.DataPilotFieldOrientation.ROW
+field = desc.getDataPilotFields().getByIndex(df)
+field.Orientation = com.sun.star.sheet.DataPilotFieldOrientation.DATA
+field.Function = AggFunction(op("agg"))
+out = A1Cell(op("output"))
+tables.insertNewByName(op("name"), sheet.getCellByPosition(out(0), out(1)).CellAddress, desc)
+doc.store()
+doc.close(True)
+g_hasDoc = False
+g_doc = Nothing
+g_rows = "1"
+End Sub
+
+Sub RefreshPilot(op As Object)
+CreatePilot op
 End Sub
 </script:module>
