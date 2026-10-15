@@ -20,15 +20,11 @@ class ImportStore:
         return None
 
     def save(self, imp: dict) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps([i for i in self.list() if i["name"] != imp["name"]] + [imp], indent=2),
-            encoding="utf-8",
-        )
+        self._write([i for i in self.list() if i["name"] != imp["name"]] + [imp])
 
     def remove(self, name: str) -> None:
+        self._write([i for i in self.list() if i["name"] != name])
+
+    def _write(self, rows: list) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps([i for i in self.list() if i["name"] != name], indent=2),
-            encoding="utf-8",
-        )
+        self.path.write_text(json.dumps(rows, indent=2), encoding="utf-8")

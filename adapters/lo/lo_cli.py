@@ -29,22 +29,24 @@ def run_saved(store: ImportStore, name: str, run_dir) -> int:
     if imp is None:
         raise ValueError(f'no saved import named "{name}"')
     run_dir = Path(run_dir)
+    dest = {"sheet": imp.get("sheet", "Sheet1"), "range": imp.get("range", "A1")}
     if imp["kind"] == "table":
         return import_table(
             imp["db"],
-            {"schema": imp["schema"], "table": imp["table"], "columns": imp["columns"], "limit": imp.get("limit")},
+            {"schema": imp["schema"], "table": imp["table"], "columns": imp["columns"],
+             "limit": imp.get("limit"), **dest},
             imp["workbook"],
             run_dir,
         )
     return import_query(
         imp["db"],
-        {"sql": imp["sql"], "params": imp.get("params"), "limit": imp.get("limit")},
+        {"sql": imp["sql"], "params": imp.get("params"), "limit": imp.get("limit"), **dest},
         imp["workbook"],
         run_dir,
     )
 
 
-def dispatch(argv: list, store_file: Path, run_dir: Path) -> int:
+def dispatch(argv: list, store_file: Path, run_dir=None) -> int:
     try:
         cmd = parse_args(argv)
     except ValueError as e:
@@ -60,32 +62,25 @@ def dispatch(argv: list, store_file: Path, run_dir: Path) -> int:
             store.remove(cmd["name"])
             return 0
         if cmd["command"] == "run":
-            count = run_saved(store, cmd["name"], run_dir)
+            count = run_saved(store, cmd["name"], home_run_dir())
             print(f"{cmd['name']}: {count} rows")
             return 0
         if "table" in cmd:
-            schema, _, table = cmd["table"].partition(".")
-            if not schema or not table or "." not in cmd["table"]:
+            from lo_import import resolve_columns
+
+            parts = cmd["table"].split(".")
+            if len(parts) != 2 or not parts[0] or not parts[1]:
                 print('--table must be SCHEMA.TABLE (got "%s")' % cmd["table"], file=sys.stderr)
                 return 2
-            import duckdb
-
-            con = duckdb.connect(cmd["db"])
-            try:
-                cols = [r[0] for r in con.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position",
-                    [schema, table],
-                ).fetchall()]
-            finally:
-                con.close()
-            if not cols:
+            schema, table = parts
+            columns = resolve_columns(cmd["db"], schema, table)
+            if not columns:
                 print(f"table {cmd['table']} not found or has no columns", file=sys.stderr)
                 return 1
             store.save({
                 "name": cmd["name"], "db": cmd["db"], "kind": "table",
-                "schema": schema, "table": table, "columns": cols,
-                "workbook": cmd["workbook"], "range": cmd["range"], "header": True,
+                "schema": schema, "table": table, "columns": columns,
+                "workbook": cmd["workbook"], "sheet": cmd["sheet"], "range": cmd["range"], "header": True,
                 **({"limit": cmd["limit"]} if "limit" in cmd else {}),
             })
         else:
@@ -94,11 +89,12 @@ def dispatch(argv: list, store_file: Path, run_dir: Path) -> int:
                 return 2
             store.save({
                 "name": cmd["name"], "db": cmd["db"], "kind": "query",
-                "sql": cmd["sql"], "workbook": cmd["workbook"],
+                "sql": cmd["sql"], "params": cmd.get("params"),
+                "workbook": cmd["workbook"], "sheet": cmd["sheet"],
                 "range": cmd["range"], "header": True,
                 **({"limit": cmd["limit"]} if "limit" in cmd else {}),
             })
-        print(f"saved {cmd['name']} (columns resolve on first run)")
+        print(f"saved {cmd['name']}")
         return 0
     except Exception as e:
         print(str(e), file=sys.stderr)
@@ -107,7 +103,7 @@ def dispatch(argv: list, store_file: Path, run_dir: Path) -> int:
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    return dispatch(argv, _store_file(), home_run_dir())
+    return dispatch(argv, _store_file())
 
 
 if __name__ == "__main__":

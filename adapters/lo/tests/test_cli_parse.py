@@ -7,7 +7,7 @@ def test_parses_save_run_remove_list():
     assert parse_args(["save", "--name", "o", "--db", "s.duckdb", "--table", "main.t",
                        "--workbook", "s.ods", "--range", "A1"]) == {
         "command": "save", "name": "o", "db": "s.duckdb", "table": "main.t",
-        "workbook": "s.ods", "range": "A1",
+        "workbook": "s.ods", "range": "A1", "sheet": "Sheet1",
     }
     assert parse_args(["run", "--name", "o"]) == {"command": "run", "name": "o"}
     assert parse_args(["remove", "--name", "o"]) == {"command": "remove", "name": "o"}
