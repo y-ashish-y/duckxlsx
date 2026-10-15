@@ -24,7 +24,6 @@ If g_hasDoc Then
 On Error Resume Next
 g_doc.close(True)
 g_hasDoc = False
-g_hasDoc = False
 End If
 WriteResult Environ("DUCKXLSX_RUNDIR"), "error", "", Err &amp; " " &amp; Error$, ""
 End Sub
@@ -76,9 +75,6 @@ Next i
 A1Cell = Array(col - 1, CLng(digits) - 1)
 End Function
 
-Function A1ColRow(cell As String) As Object
-A1ColRow = A1Cell(cell)
-End Function
 
 Function A1RangeBounds(addr As String) As Object
 Dim sep As Integer, top As Object, bottom As Object
@@ -188,7 +184,7 @@ sheet = doc.Sheets.getByIndex(0)
 End If
 On Error Goto 0
 Dim origin As Object, dest As Object
-origin = A1ColRow(op("range"))
+origin = A1Cell(op("range"))
 dest = sheet.getCellRangeByPosition(origin(0), origin(1), origin(0) + ncols - 1, origin(1) + nrows + header_rows - 1)
 dest.setDataArray(full)
 doc.storeAsURL(ConvertToUrl(op("workbook")), Array())
@@ -266,7 +262,6 @@ desktop = ctx.getServiceManager().createInstanceWithContext("com.sun.star.frame.
 doc = desktop.loadComponentFromURL(ConvertToUrl(op("workbook")), "_blank", 0, Array())
 g_doc = doc
 g_hasDoc = True
-g_doc = doc
 On Error Resume Next
 sheet = doc.Sheets.getByName(op("sheet"))
 If Err &lt;&gt; 0 Then

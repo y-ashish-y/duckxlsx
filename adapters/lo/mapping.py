@@ -85,6 +85,23 @@ def columns_from_names_types(names: list, types: list, overrides: Optional[dict]
     return columns
 
 
+def coerce_cell(text: str, type_: str):
+    """Convert macro TSV text back to a typed value for INSERT literals."""
+    if text == "":
+        return None
+    if type_ == "BOOLEAN":
+        return text.strip().upper() == "TRUE"
+    if type_ in ("INTEGER", "DOUBLE"):
+        try:
+            number = float(text.replace(",", "."))
+        except ValueError:
+            return text
+        if type_ == "INTEGER" and number.is_integer():
+            return int(number)
+        return number
+    return text
+
+
 def create_table_sql(table: str, columns: list, mode: str) -> str:
     or_replace = " OR REPLACE" if mode == "overwrite" else ""
     defs = ", ".join(f"{quote_ident(c['name'])} {c['type']}" for c in columns)

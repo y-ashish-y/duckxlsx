@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from mapping import build_import_sql, create_table_sql, infer_columns, insert_sql
+from mapping import build_import_sql, coerce_cell, create_table_sql, infer_columns, insert_sql
 
 
 def test_selects_columns_with_limit():
@@ -78,3 +78,12 @@ def test_varchar_values_quote_regardless_of_python_type():
         insert_sql("t", [{"name": "a", "type": "VARCHAR"}, {"name": "b", "type": "INTEGER"}], [[1, 2]])
         == "INSERT INTO \"t\" (\"a\", \"b\") VALUES ('1', 2);"
     )
+
+
+def test_coerce_cell():
+    assert coerce_cell("", "INTEGER") is None
+    assert coerce_cell("FALSE", "BOOLEAN") is False
+    assert coerce_cell("TRUE", "BOOLEAN") is True
+    assert coerce_cell("4", "INTEGER") == 4
+    assert coerce_cell("4.5", "DOUBLE") == 4.5
+    assert coerce_cell("2026-01-02 03:04:05", "TIMESTAMP") == "2026-01-02 03:04:05"
