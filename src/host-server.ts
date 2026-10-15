@@ -180,7 +180,9 @@ export async function startHost(opts: HostOptions = {}): Promise<{ port: number;
         return json(res, 200, { rows });
       }
       if (req.method === "GET" && opts.gridcraftDir && url.pathname.startsWith("/gridcraft/")) {
-        const file = safeJoin(opts.gridcraftDir, url.pathname.slice("/gridcraft/".length));
+        let rel = url.pathname.slice("/gridcraft/".length);
+        if (rel === "" || rel.endsWith("/")) rel += "index.html";
+        const file = safeJoin(opts.gridcraftDir, rel);
         if (!file || !existsSync(file)) return json(res, 404, { error: "not found" });
         const type = file.endsWith(".wasm") ? "application/wasm" : file.endsWith(".js") ? "text/javascript" : file.endsWith(".html") ? "text/html" : "application/octet-stream";
         return send(res, 200, readFileSync(file), type);
