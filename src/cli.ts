@@ -75,4 +75,3 @@ function parseHost(rest: string[]): CliCommand {
     ...(rest.includes("--gridcraft-url") ? { gridcraftUrl: requireFlagValue(rest, "--gridcraft-url") } : {}),
   };
 }
-}
