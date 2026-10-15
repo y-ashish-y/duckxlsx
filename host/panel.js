@@ -56,23 +56,32 @@ $("#connect").addEventListener("click", async () => {
   } catch (err) { fail(err.message); }
 });
 
-// --- import: DuckDB table -> xlsx bytes -> gridcraft:open ---
+// --- import: DuckDB table/SQL -> xlsx bytes -> gridcraft:open ---
+const openInGridCraft = async (db, payload, label) => {
+  say(`Importing ${label}…`);
+  const res = await api("/api/import", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ db, ...payload }),
+  });
+  const bytes = await res.arrayBuffer();
+  frame.contentWindow.postMessage({ type: "gridcraft:open", name: `${label}.xlsx`, bytes }, gridcraftOrigin);
+  say(`${label}: ${res.headers.get("x-rows")} rows sent to GridCraft.`);
+};
+
 $("#import").addEventListener("click", async () => {
   const db = $("#db").value.trim();
   const sel = $("#tables").value;
   if (!db || !sel) return fail("connect and pick a table first");
   const { schema, table } = JSON.parse(sel);
-  try {
-    say(`Importing ${schema}.${table}…`);
-    const res = await api("/api/import", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ db, schema, table }),
-    });
-    const bytes = await res.arrayBuffer();
-    frame.contentWindow.postMessage({ type: "gridcraft:open", name: `${table}.xlsx`, bytes }, gridcraftOrigin);
-    say(`${table}: ${res.headers.get("x-rows")} rows sent to GridCraft.`);
-  } catch (err) { fail(err.message); }
+  try { await openInGridCraft(db, { schema, table }, table); } catch (err) { fail(err.message); }
+});
+
+$("#import-sql").addEventListener("click", async () => {
+  const db = $("#db").value.trim();
+  const sql = $("#sql").value.trim();
+  if (!db || !sql) return fail("connect and enter SQL first");
+  try { await openInGridCraft(db, { sql }, "query"); } catch (err) { fail(err.message); }
 });
 
 // --- export: saved bytes -> DuckDB table ---

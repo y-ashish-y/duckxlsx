@@ -42,11 +42,15 @@ async function awaitCompleteZip(path: string, timeoutMs = 10_000): Promise<void>
 // exportFile (DuckDB is single-writer per file).
 export async function exportFile(
   dbPath: string,
-  source: { schema: string; table: string },
+  source: { schema: string; table: string } | { sql: string; name: string },
   xlsxPath: string,
 ): Promise<void> {
   const helper = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "copy-xlsx.mjs");
-  const sql = `COPY (SELECT * FROM ${quoteIdent(source.schema)}.${quoteIdent(source.table)}) TO ${quoteString(xlsxPath)} WITH (FORMAT xlsx, HEADER true);`;
+  const select =
+    "sql" in source
+      ? `(${source.sql.replace(/;+\s*$/, "")})`
+      : `(SELECT * FROM ${quoteIdent(source.schema)}.${quoteIdent(source.table)})`;
+  const sql = `COPY ${select} TO ${quoteString(xlsxPath)} WITH (FORMAT xlsx, HEADER true);`;
   await new Promise<void>((resolve, reject) => {
     execFile(process.execPath, [helper, dbPath, sql], (err, _stdout, stderr) => {
       if (err) reject(new Error(`exportFile: copy failed: ${stderr || err.message}`));

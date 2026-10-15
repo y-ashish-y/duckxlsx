@@ -60,6 +60,7 @@ describe("host server", () => {
     expect(page.headers.get("content-type")).toContain("text/html");
     const config = await (await api("/api/config")).json();
     expect(typeof config.gridcraftUrl).toBe("string");
+    expect(config.gridcraftUrl).toContain("host=parent");
   });
 
   it("lists tables and rejects missing db", async () => {
@@ -80,6 +81,18 @@ describe("host server", () => {
     expect(bytes.subarray(0, 2).toString()).toBe("PK");
     expect(bytes.includes(Buffer.from("PK\x05\x06", "binary"))).toBe(true);
     expect(Number(res.headers.get("x-rows"))).toBe(2);
+  });
+
+  it.runIf(excel)("imports a SQL query to xlsx bytes", async () => {
+    const res = await api("/api/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ db, sql: "SELECT item FROM shop.orders WHERE qty > 3" }),
+    });
+    expect(res.status).toBe(200);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    expect(bytes.subarray(0, 2).toString()).toBe("PK");
+    expect(Number(res.headers.get("x-rows"))).toBe(1);
   });
 
   it("rejects import of a missing table", async () => {

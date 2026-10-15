@@ -7,8 +7,8 @@
 import duckdb from "duckdb";
 
 const [dbPath, table, mode, xlsxPath] = process.argv.slice(2);
-const qt = (name) => `"${name.replace(/"/g, '""')}"`;
-const qs = (value) => `'${value.replace(/'/g, "''")}'`;
+const quoteIdent = (name) => `"${name.replace(/"/g, '""')}"`;
+const quoteLiteral = (value) => `'${value.replace(/'/g, "''")}'`;
 
 const db = new duckdb.Database(dbPath);
 db.all("INSTALL excel; LOAD excel;", (err) => {
@@ -17,14 +17,14 @@ db.all("INSTALL excel; LOAD excel;", (err) => {
     process.exitCode = 1;
     return;
   }
-  const go = () => {
-    db.all(`CREATE TABLE ${qt(table)} AS SELECT * FROM read_xlsx(${qs(xlsxPath)}, header = true);`, (createErr) => {
+  const createFromXlsx = () => {
+    db.all(`CREATE TABLE ${quoteIdent(table)} AS SELECT * FROM read_xlsx(${quoteLiteral(xlsxPath)}, header = true);`, (createErr) => {
       if (createErr) {
         console.error(createErr.message);
         process.exitCode = 1;
         return;
       }
-      db.all(`SELECT COUNT(*) AS n FROM ${qt(table)};`, (countErr, rows) => {
+      db.all(`SELECT COUNT(*) AS n FROM ${quoteIdent(table)};`, (countErr, rows) => {
         if (countErr) {
           console.error(countErr.message);
           process.exitCode = 1;
@@ -35,13 +35,13 @@ db.all("INSTALL excel; LOAD excel;", (err) => {
     });
   };
   if (mode === "overwrite") {
-    db.all(`DROP TABLE IF EXISTS ${qt(table)};`, (dropErr) => {
+    db.all(`DROP TABLE IF EXISTS ${quoteIdent(table)};`, (dropErr) => {
       if (dropErr) {
         console.error(dropErr.message);
         process.exitCode = 1;
         return;
       }
-      go();
+      createFromXlsx();
     });
   } else if (mode === "create") {
     db.all(
@@ -57,7 +57,7 @@ db.all("INSTALL excel; LOAD excel;", (err) => {
           process.exitCode = 1;
           return;
         }
-        go();
+        createFromXlsx();
       },
     );
   } else {

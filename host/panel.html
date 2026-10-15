@@ -19,7 +19,6 @@
     #dirty { color: #b60; }
     #framewrap { flex: 1; display: flex; }
     #gridcraft { flex: 1; border: 0; }
-    #banner { display: none; background: #b00; color: #fff; padding: 8px 12px; }
   </style>
 </head>
 <body>
@@ -36,6 +35,8 @@
     <h2>Import → GridCraft</h2>
     <p>Opens the table as a workbook in the frame. Save current work first — opening replaces it.</p>
     <button id="import">Import table to GridCraft</button>
+    <label>…or custom SQL <input id="sql" placeholder="SELECT * FROM shop.orders WHERE qty > 1" /></label>
+    <button id="import-sql">Import SQL to GridCraft</button>
 
     <h2>Export → DuckDB</h2>
     <p>Press Save in GridCraft (Ctrl+S), then export the received file:</p>
@@ -47,7 +48,6 @@
     </div>
   </div>
   <div id="framewrap">
-    <div id="banner"></div>
     <iframe id="gridcraft" title="GridCraft spreadsheet" allow="fullscreen; clipboard-read; clipboard-write" allowfullscreen></iframe>
   </div>
   <script src="./panel.js"></script>
