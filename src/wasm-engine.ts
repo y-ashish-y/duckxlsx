@@ -55,6 +55,16 @@ async function loadHandle(): Promise<FileSystemFileHandle | null> {
   }
 }
 
+// SQL to (re)point the virtual `picked` database at the freshly registered file.
+// DuckDB has no `DETACH IF EXISTS`; emitting it fails to parse and broke every
+// connect, so the detach is conditional instead. Exported for regression tests.
+export function attachStatements(alreadyAttached: boolean): string[] {
+  const statements: string[] = [];
+  if (alreadyAttached) statements.push("DETACH picked;");
+  statements.push("ATTACH 'picked.duckdb' AS picked;");
+  return statements;
+}
+
 // Taskpane-side engine: same Engine seam as NodeEngine, backed by DuckDB-WASM.
 // A local .duckdb enters only via an explicit user file pick — never a silent
 // path (Office sandbox has no local-path I/O). The picked FileSystemFileHandle
@@ -79,8 +89,12 @@ export class WasmEngine implements Engine {
   }
 
   private async attach(conn: duckdb.AsyncDuckDBConnection): Promise<void> {
-    await conn.query("DETACH IF EXISTS picked;");
-    await conn.query("ATTACH 'picked.duckdb' AS picked;");
+    const existing = await conn.query(
+      "SELECT database_name FROM duckdb_databases() WHERE database_name = 'picked'",
+    );
+    for (const sql of attachStatements(existing.toArray().length > 0)) {
+      await conn.query(sql);
+    }
   }
 
   private async finishConnect(db: duckdb.AsyncDuckDB, name: string): Promise<Connection> {

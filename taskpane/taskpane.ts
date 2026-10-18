@@ -3,6 +3,8 @@ import {
   createTableSql,
   inferColumns,
   insertSql,
+  shouldPromptOverwrite,
+  tableExistsSql,
   type CellValue,
   type ColumnDef,
   type ColumnOverrides,
@@ -13,6 +15,11 @@ import { WasmEngine } from "../src/wasm-engine.js";
 const COLUMN_TYPES: ColumnType[] = ["INTEGER", "DOUBLE", "BOOLEAN", "TIMESTAMP", "VARCHAR"];
 
 const engine = new WasmEngine();
+// Dev-only automation hook (vite strips this from production builds): the
+// in-Excel CDP scripts reach the live engine without clicking through the picker.
+if (import.meta.env.DEV) {
+  (window as unknown as { __duckxlsxEngine?: WasmEngine }).__duckxlsxEngine = engine;
+}
 const status = document.querySelector("#status")!;
 const catalog = document.querySelector("#catalog")!;
 const fileInput = document.querySelector<HTMLInputElement>("#file")!;
@@ -140,22 +147,71 @@ document.querySelector("#export-preview-btn")!.addEventListener("click", async (
   }
 });
 
+// window.confirm throws in Excel's WebView2 ("Function window.confirm is not
+// supported.") and the old check sat outside the try — Export with "overwrite
+// existing table" ticked quietly did nothing inside Excel. Ask with an inline
+// prompt instead, and keep every failure inside a try so it reaches #status.
+const exportConfirm = document.querySelector<HTMLDivElement>("#export-confirm")!;
+const exportConfirmText = document.querySelector<HTMLSpanElement>("#export-confirm-text")!;
+let pendingOverwrite: string | null = null;
+
+function hideOverwritePrompt(): void {
+  pendingOverwrite = null;
+  exportConfirm.hidden = true;
+}
+
+async function runExport(table: string): Promise<void> {
+  const { header, rows } = await readSelection();
+  const finalColumns = inferColumns(header, rows, readOverrides());
+  await engine.query(
+    createTableSql(table, finalColumns, exportOverwrite.checked ? "overwrite" : "create"),
+  );
+  if (rows.length > 0) await engine.query(insertSql(table, finalColumns, rows));
+  await renderCatalog();
+  status.textContent = `Exported selection to ${table}.`;
+}
+
+async function tableExists(table: string): Promise<boolean> {
+  return (await engine.query(tableExistsSql(table))).length > 0;
+}
+
 document.querySelector("#export")!.addEventListener("click", async () => {
-  const table = exportTable.value.trim();
-  if (!table) {
-    status.textContent = "Name the DuckDB table first.";
-    return;
-  }
-  const overwrite = exportOverwrite.checked;
-  if (overwrite && !confirm(`Overwrite ${table}? Its rows will be replaced.`)) return;
+  hideOverwritePrompt();
   try {
-    const { header, rows } = await readSelection();
-    const finalColumns = inferColumns(header, rows, readOverrides());
-    await engine.query(createTableSql(table, finalColumns, overwrite ? "overwrite" : "create"));
-    if (rows.length > 0) await engine.query(insertSql(table, finalColumns, rows));
-    await renderCatalog();
-    status.textContent = `Exported selection to ${table}.`;
+    const table = exportTable.value.trim();
+    if (!table) {
+      status.textContent = "Name the DuckDB table first.";
+      return;
+    }
+    if (shouldPromptOverwrite(exportOverwrite.checked, await tableExists(table))) {
+      pendingOverwrite = table;
+      exportConfirmText.textContent = `Overwrite ${table}? Its rows will be replaced.`;
+      exportConfirm.hidden = false;
+      document.querySelector<HTMLButtonElement>("#export-confirm-yes")!.focus();
+      return;
+    }
+    await runExport(table);
   } catch (err) {
     fail(err);
   }
 });
+
+document.querySelector("#export-confirm-yes")!.addEventListener("click", async () => {
+  const table = pendingOverwrite;
+  hideOverwritePrompt();
+  if (!table) return;
+  try {
+    await runExport(table);
+  } catch (err) {
+    fail(err);
+  }
+});
+
+document.querySelector("#export-confirm-no")!.addEventListener("click", () => {
+  const table = pendingOverwrite;
+  hideOverwritePrompt();
+  if (table) status.textContent = `Left ${table} unchanged.`;
+});
+
+// a prompt for a table name the user has since edited would be stale
+exportTable.addEventListener("input", hideOverwritePrompt);

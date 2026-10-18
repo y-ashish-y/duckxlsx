@@ -2,8 +2,8 @@
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:type="TaskPaneApp">
-  <Id>3f6a7c2e-1d4b-4a5e-9c8f-duckxlsx000001</Id>
-  <Version>0.1.0</Version>
+  <Id>3F6A7C2E-1D4B-4A5E-9C8F-0D0C4B1A2E01</Id>
+  <Version>0.1.0.0</Version>
   <ProviderName>duckxlsx</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="duckxlsx — local DuckDB in Excel" />

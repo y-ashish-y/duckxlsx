@@ -19,6 +19,11 @@
     <label><input id="export-overwrite" type="checkbox" /> overwrite existing table</label>
     <button id="export-preview-btn">Preview selection</button>
     <button id="export">Export selection to DuckDB</button>
+    <div id="export-confirm" hidden>
+      <span id="export-confirm-text"></span>
+      <button id="export-confirm-yes">Overwrite</button>
+      <button id="export-confirm-no">Cancel</button>
+    </div>
     <p id="export-address"></p>
     <ul id="export-preview"></ul>
     <script type="module" src="./taskpane.ts"></script>
