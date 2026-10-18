@@ -1,5 +1,6 @@
 node_modules/
 dist/
+certs/
 fixtures/bridge-smoke.xlsx
 fixtures/import-smoke.xlsx
 fixtures/tmp/

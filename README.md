@@ -99,8 +99,18 @@ Run dirs must live under `$HOME` (invisible in the flatpak sandbox); a stray `so
 The Office JS taskpane (`taskpane/` + `src/catalog.ts` + `src/wasm-engine.ts`, manifest in `manifest/`) talks to a local `.duckdb` through embedded DuckDB-WASM: connect via file picker (or the `<input type=file>` fallback), browse schemas/tables/columns, preview the live selection with inferred column names and types, override them, and export to a table — `CREATE`, or `CREATE OR REPLACE` behind an inline overwrite prompt. Import/pivots/refresh follow in #10+.
 
 ```
-npm run dev     # vite dev server (https://localhost:3000, mkcert CA trusted)
-npm run build   # dist/ taskpane bundle, served for sideload
+# once: mint a localhost cert Excel/WebView2 will trust
+mkcert -install
+mkcert -key-file certs/localhost-key.pem -cert-file certs/localhost.pem localhost 127.0.0.1
+
+npm run dev     # vite dev server on https://localhost:3000 (plain http when certs/ is absent)
+npm run build   # dist/ taskpane bundle, for serving from any static https host
+```
+
+The manifest's `SourceLocation` is `https://localhost:3000`; on Windows, WebView2 additionally needs the localhost loopback exemption once (admin PowerShell):
+
+```powershell
+CheckNetIsolation LoopbackExempt -a -n="microsoft.win32webviewhost_cw5n1h2txyewy"
 ```
 
 Sideload (developer registry, no UI dialog — verify the manifest path):
