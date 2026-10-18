@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="docs/img/duckxlsx-logo.png" alt="duckxlsx logo" width="560">
-</p>
-
-<h1 align="center">duckxlsx 📊 — DuckDB in, spreadsheet out.</h1>
+<h1 align="center"><img src="docs/img/duckxlsx-icon.png" alt="duckxlsx logo" width="30"> duckxlsx — DuckDB in, spreadsheet out.</h1>
 
 <div align="center">
 
