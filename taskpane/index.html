@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>duckxlsx</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  </head>
+  <body>
+    <h1>duckxlsx</h1>
+    <p id="status">Starting…</p>
+    <button id="connect">Connect local .duckdb</button>
+    <input id="file" type="file" accept=".duckdb,.db" hidden />
+    <button id="switch">Switch file</button>
+    <h2>Catalog</h2>
+    <ul id="catalog"></ul>
+    <h2>Export</h2>
+    <input id="export-table" placeholder="table name" />
+    <label><input id="export-headers" type="checkbox" checked /> first row is headers</label>
+    <label><input id="export-overwrite" type="checkbox" /> overwrite existing table</label>
+    <button id="export-preview-btn">Preview selection</button>
+    <button id="export">Export selection to DuckDB</button>
+    <div id="export-confirm" hidden>
+      <span id="export-confirm-text"></span>
+      <button id="export-confirm-yes">Overwrite</button>
+      <button id="export-confirm-no">Cancel</button>
+    </div>
+    <p id="export-address"></p>
+    <ul id="export-preview"></ul>
+    <script type="module" src="./taskpane.ts"></script>
+  </body>
+</html>

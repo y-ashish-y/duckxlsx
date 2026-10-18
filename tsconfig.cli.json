@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist-cli",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022"
+  },
+  "include": ["src"]
+}

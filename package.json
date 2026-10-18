@@ -7,17 +7,22 @@
     "doc": "docs"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
     "duckdb": "^1.4.4"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@types/office-js": "^1.0.612",
     "typescript": "^7.0.2",
+    "vite": "^8.3.4",
     "vitest": "^5.0.4"
   },
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build:cli": "tsc --outDir dist-cli --rootDir src --module nodenext --moduleResolution nodenext --target es2022 --strict --skipLibCheck --esModuleInterop",
+    "build:cli": "tsc -p tsconfig.cli.json",
     "host": "node dist-cli/host-server.js"
   },
   "repository": {

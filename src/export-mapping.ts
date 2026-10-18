@@ -62,6 +62,21 @@ export function createTableSql(table: string, columns: ColumnDef[], mode: "creat
   return `CREATE${orReplace} TABLE ${quoteIdent(table)} (${defs});`;
 }
 
+// The Export button's overwrite confirmation. Office's WebView2 has no
+// window.confirm — it throws "Function window.confirm is not supported." — and a
+// throw inside a click listener never reaches the user, so the confirmation is an
+// inline prompt instead. Prompt only when there is something to replace: a first
+// export with "overwrite" ticked is just a create. Exported for tests.
+export function shouldPromptOverwrite(overwrite: boolean, tableExists: boolean): boolean {
+  return overwrite && tableExists;
+}
+
+// Existence probe behind that prompt. A table name is a single identifier
+// (createTableSql quotes it whole), so it is matched as a string literal.
+export function tableExistsSql(table: string): string {
+  return `SELECT 1 FROM information_schema.tables WHERE table_name = ${quoteString(table)};`;
+}
+
 export function insertSql(table: string, columns: ColumnDef[], rows: CellValue[][]): string {
   if (rows.length === 0) throw new Error("insertSql: no rows to insert");
   const names = columns.map((c) => quoteIdent(c.name)).join(", ");

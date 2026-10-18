@@ -6,7 +6,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node", "vitest/globals", "vite/client", "office-js"]
   },
-  "include": ["src"]
+  "include": ["src", "taskpane", "vite.config.ts", "vitest.config.ts"]
 }

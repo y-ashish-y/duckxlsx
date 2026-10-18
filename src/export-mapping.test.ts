@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createTableSql, inferColumns, insertSql } from "./export-mapping.js";
+import {
+  createTableSql,
+  inferColumns,
+  insertSql,
+  shouldPromptOverwrite,
+  tableExistsSql,
+} from "./export-mapping.js";
 import { NodeEngine } from "./engine.js";
 
 let engine: NodeEngine;
@@ -64,5 +70,25 @@ describe("export mapping", () => {
     await engine.query(insertSql("snap", columns, [[2]]));
     expect(await engine.query("SELECT id FROM snap")).toEqual([{ id: 2 }]);
     await engine.close();
+  });
+});
+
+describe("overwrite prompt decision", () => {
+  it("prompts only when overwrite is ticked and the table exists", () => {
+    expect(shouldPromptOverwrite(false, false)).toBe(false);
+    expect(shouldPromptOverwrite(false, true)).toBe(false);
+    expect(shouldPromptOverwrite(true, false)).toBe(false); // nothing to replace: a create
+    expect(shouldPromptOverwrite(true, true)).toBe(true);
+  });
+
+  it("existence probe finds real tables and not missing ones", async () => {
+    await engine.query(createTableSql("probe", [{ name: "id", type: "INTEGER" }], "create"));
+    expect((await engine.query(tableExistsSql("probe"))).length).toBe(1);
+    expect((await engine.query(tableExistsSql("missing"))).length).toBe(0);
+    await engine.close();
+  });
+
+  it("escapes quotes in the probed table name", () => {
+    expect(tableExistsSql("o'brien")).toContain(`'o''brien'`);
   });
 });
