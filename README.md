@@ -1,6 +1,14 @@
-# duckxlsx 📊 — DuckDB in, spreadsheet out.
+<p align="center">
+  <img src="docs/img/duckxlsx-logo.png" alt="duckxlsx logo" width="560">
+</p>
+
+<h1 align="center">duckxlsx 📊 — DuckDB in, spreadsheet out.</h1>
+
+<div align="center">
 
 [![Node](https://img.shields.io/badge/node-22%2B-green?style=flat-square)](https://nodejs.org/) [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://www.python.org/) [![License](https://img.shields.io/badge/license-ISC-green?style=flat-square)](#license)
+
+</div>
 
 duckxlsx bridges spreadsheets and DuckDB: import query results into sheets, export sheet work back to tables. No server, no warehouse — a `.duckdb` file on your machine. Works from the Node.js CLI (GridCraft), headless LibreOffice (Calc), or the Excel taskpane add-in.
 
