@@ -2,7 +2,7 @@
 
 [![Node](https://img.shields.io/badge/node-22%2B-green?style=flat-square)](https://nodejs.org/) [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://www.python.org/) [![License](https://img.shields.io/badge/license-ISC-green?style=flat-square)](#license)
 
-duckxlsx bridges spreadsheets and DuckDB: import query results into sheets, export sheet work back to tables. No server, no warehouse — a `.duckdb` file on your machine. Works from the Node.js CLI (GridCraft) or headless LibreOffice (Calc).
+duckxlsx bridges spreadsheets and DuckDB: import query results into sheets, export sheet work back to tables. No server, no warehouse — a `.duckdb` file on your machine. Works from the Node.js CLI (GridCraft), headless LibreOffice (Calc), or the Excel taskpane add-in.
 
 [![System architecture](docs/diagrams/architecture.svg)](docs/diagrams/architecture.html)
 
@@ -96,7 +96,20 @@ Run dirs must live under `$HOME` (invisible in the flatpak sandbox); a stray `so
 
 ## Excel adapter
 
-Parked: the Office JS taskpane and manifest live on the `impl/9-scaffold-connect-browse`, `impl/10-select-data-import`, and `impl/15-export-mapping` branches (plus `research/excel`), pending a real-Excel sideload. Nothing Excel-specific ships on `main`.
+The Office JS taskpane (`taskpane/` + `src/catalog.ts` + `src/wasm-engine.ts`, manifest in `manifest/`) talks to a local `.duckdb` through embedded DuckDB-WASM: connect via file picker (or the `<input type=file>` fallback), browse schemas/tables/columns, preview the live selection with inferred column names and types, override them, and export to a table — `CREATE`, or `CREATE OR REPLACE` behind an inline overwrite prompt. Import/pivots/refresh follow in #10+.
+
+```
+npm run dev     # vite dev server (https://localhost:3000, mkcert CA trusted)
+npm run build   # dist/ taskpane bundle, served for sideload
+```
+
+Sideload (developer registry, no UI dialog — verify the manifest path):
+
+```powershell
+reg add "HKCU\Software\Microsoft\Office\16.0\WEF\Developer" /v 3F6A7C2E-1D4B-4A5E-9C8F-0D0C4B1A2E01 /t REG_SZ /d "<repo>\manifest\manifest.xml" /f
+```
+
+then Home ▸ Add-ins ▸ Developer Add-ins ▸ duckxlsx. Connect + catalog + live-selection export with a column-mapping override + the overwrite prompt were verified inside Excel (Win32 WebView2, CDP-driven pane); `src/pane-host-constraints.test.ts` guards the host-only constraints a browser harness cannot see.
 
 ## Environment rules
 
@@ -105,6 +118,8 @@ Learned empirically — do not work around. Full rationale lives next to the cod
 1. DuckDB excel extension finalizes xlsx only at natural process exit — never force-close mid-export.
 2. `getDataArray()` returns array-of-rows (`m(r)(j)`, never `m(r, j)`).
 3. `.xba` files need `&amp;`/`&lt;`/`&gt;` escaping; merge `script.xlb` textually, never via ElementTree.
+4. Excel's WebView2 has no blocking script dialogs — `window.confirm` throws — and a throw in a listener never reaches the UI; use inline UI and keep every handler path inside `try`/`catch`.
+5. duckdb@1.4.x on Windows cannot open the same file twice in one process (even after `close()`); `NodeEngine` holds one refcounted handle per path (single-writer rule) for the process lifetime.
 
 See [docs/file-swap.md](docs/file-swap.md) (bulk-path rules) and [docs/agents/domain.md](docs/agents/domain.md) (vocabulary: *import*, *export*, *header row*, *saved import*, *adapter*).
 
