@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Node](https://img.shields.io/badge/node-22%2B-green?style=flat-square)](https://nodejs.org/) [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://www.python.org/) [![License](https://img.shields.io/badge/license-ISC-green?style=flat-square)](#license)
+[![Node](https://img.shields.io/badge/node-22%2B-green?style=flat-square)](https://nodejs.org/) [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://www.python.org/) [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#license)
 
 </div>
 
@@ -188,4 +188,4 @@ Work tracks GitHub Issues (`y-ashish-y/duckxlsx`): specs carry `ready-for-agent`
 
 ## License
 
-[ISC](LICENSE). See `license` in [package.json](package.json).
+[MIT](LICENSE). See `license` in [package.json](package.json).
