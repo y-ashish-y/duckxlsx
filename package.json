@@ -1,7 +1,7 @@
 {
   "name": "duckxlsx",
   "version": "1.0.0",
-  "description": "",
+  "description": "DuckDB in, spreadsheet out: import query results into spreadsheets, export sheet ranges back to tables.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
