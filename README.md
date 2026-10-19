@@ -167,25 +167,13 @@ reg add "HKCU\Software\Microsoft\Office\16.0\WEF\Developer" /v 3F6A7C2E-1D4B-4A5
 
 then Home ▸ Add-ins ▸ Developer Add-ins ▸ duckxlsx. Connect + catalog + live-selection export with a column-mapping override + the overwrite prompt were verified inside Excel (Win32 WebView2, CDP-driven pane); `src/pane-host-constraints.test.ts` guards the host-only constraints a browser harness cannot see.
 
-## Environment rules
-
-Learned empirically — do not work around. Full rationale lives next to the code; the short list:
-
-1. DuckDB excel extension finalizes xlsx only at natural process exit — never force-close mid-export.
-2. `getDataArray()` returns array-of-rows (`m(r)(j)`, never `m(r, j)`).
-3. `.xba` files need `&amp;`/`&lt;`/`&gt;` escaping; merge `script.xlb` textually, never via ElementTree.
-4. Excel's WebView2 has no blocking script dialogs — `window.confirm` throws — and a throw in a listener never reaches the UI; use inline UI and keep every handler path inside `try`/`catch`.
-5. duckdb@1.4.x on Windows cannot open the same file twice in one process (even after `close()`); `NodeEngine` holds one refcounted handle per path (single-writer rule) for the process lifetime.
-6. A `.duckdb` whose writes are still in the WAL opens valid-but-empty without error: hand off the `.db` **and** its `.wal`, or run `CHECKPOINT` first (a forced exit skips the finalize).
-
-See [docs/file-swap.md](docs/file-swap.md) (bulk-path rules) and [docs/agents/domain.md](docs/agents/domain.md) (vocabulary: *import*, *export*, *header row*, *saved import*, *adapter*).
-
 ## Documentation
 
 Start with the diagrams, then follow the guide for your task:
 
 - [Architecture](docs/diagrams/architecture.html) (system overview) and [deployment](docs/diagrams/deployment.html) (where each piece runs)
 - [GridCraft bulk-path rules](docs/file-swap.md) and [agent docs](docs/agents/) (issue tracker, triage labels, domain rules)
+- [Environment rules](docs/environment-rules.md) — empirical hard-won constraints (DuckDB finalization, `.xba` escaping, WebView2 dialogs, WAL handoff); do not work around
 - [GLOSSARY.md](GLOSSARY.md) for the shared vocabulary
 
 ## Development
@@ -200,4 +188,4 @@ Work tracks GitHub Issues (`y-ashish-y/duckxlsx`): specs carry `ready-for-agent`
 
 ## License
 
-ISC. See `license` in [package.json](package.json).
+[ISC](LICENSE). See `license` in [package.json](package.json).
