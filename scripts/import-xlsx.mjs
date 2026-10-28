@@ -1,67 +1,34 @@
 // Helper: load one .xlsx sheet into a DuckDB table, then let the process
-// end NATURALLY (no db.close(), no process.exit()).
+// end NATURALLY (no close(), no process.exit()).
 //
 // Same durability contract as scripts/copy-xlsx.mjs: the excel extension
 // finalizes during natural event-loop drain; explicit close/exit truncates.
 // argv: dbPath table mode(create|overwrite) xlsxPath. Prints {"rows": N}.
-import duckdb from "duckdb";
+import { DuckDBInstance } from "@duckdb/node-api";
 
 const [dbPath, table, mode, xlsxPath] = process.argv.slice(2);
 const quoteIdent = (name) => `"${name.replace(/"/g, '""')}"`;
 const quoteLiteral = (value) => `'${value.replace(/'/g, "''")}'`;
 
-const db = new duckdb.Database(dbPath);
-db.all("INSTALL excel; LOAD excel;", (err) => {
-  if (err) {
-    console.error(err.message);
-    process.exitCode = 1;
-    return;
-  }
-  const createFromXlsx = () => {
-    db.all(`CREATE TABLE ${quoteIdent(table)} AS SELECT * FROM read_xlsx(${quoteLiteral(xlsxPath)}, header = true);`, (createErr) => {
-      if (createErr) {
-        console.error(createErr.message);
-        process.exitCode = 1;
-        return;
-      }
-      db.all(`SELECT COUNT(*) AS n FROM ${quoteIdent(table)};`, (countErr, rows) => {
-        if (countErr) {
-          console.error(countErr.message);
-          process.exitCode = 1;
-          return;
-        }
-        console.log(JSON.stringify({ rows: Number(rows[0].n) }));
-      });
-    });
-  };
+try {
+  // v1.5.6 keeps files readable by the bundled DuckDB-WASM 1.5.x taskpane.
+  const instance = await DuckDBInstance.create(dbPath, { storage_compatibility_version: "v1.5.6" });
+  const connection = await instance.connect();
+  await connection.run("INSTALL excel; LOAD excel;");
   if (mode === "overwrite") {
-    db.all(`DROP TABLE IF EXISTS ${quoteIdent(table)};`, (dropErr) => {
-      if (dropErr) {
-        console.error(dropErr.message);
-        process.exitCode = 1;
-        return;
-      }
-      createFromXlsx();
-    });
+    await connection.run(`DROP TABLE IF EXISTS ${quoteIdent(table)};`);
   } else if (mode === "create") {
-    db.all(
+    const existing = await connection.runAndReadAll(
       `SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = 'main' AND table_name = '${table.replace(/'/g, "''")}';`,
-      (checkErr, rows) => {
-        if (checkErr) {
-          console.error(checkErr.message);
-          process.exitCode = 1;
-          return;
-        }
-        if (Number(rows[0].n) > 0) {
-          console.error(`table ${table} already exists`);
-          process.exitCode = 1;
-          return;
-        }
-        createFromXlsx();
-      },
     );
+    if (Number(existing.getRowObjectsJS()[0].n) > 0) throw new Error(`table ${table} already exists`);
   } else {
-    console.error(`mode must be create|overwrite (got ${mode})`);
-    process.exitCode = 1;
+    throw new Error(`mode must be create|overwrite (got ${mode})`);
   }
-});
+  await connection.run(`CREATE TABLE ${quoteIdent(table)} AS SELECT * FROM read_xlsx(${quoteLiteral(xlsxPath)}, header = true);`);
+  const count = await connection.runAndReadAll(`SELECT COUNT(*) AS n FROM ${quoteIdent(table)};`);
+  console.log(JSON.stringify({ rows: Number(count.getRowObjectsJS()[0].n) }));
+} catch (err) {
+  console.error(err.message);
+  process.exitCode = 1;
+}

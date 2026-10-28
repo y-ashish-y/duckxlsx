@@ -6,8 +6,7 @@ import csv
 from datetime import date, datetime
 from pathlib import Path
 
-import duckdb
-
+from db import connect
 from mapping import build_import_sql, infer_columns
 from runner import run_op, write_op_ini
 
@@ -31,7 +30,7 @@ def _write_tsv(path: Path, header, rows) -> None:
 
 
 def resolve_columns(db_path: str, schema: str, table: str) -> list:
-    con = duckdb.connect(db_path)
+    con = connect(db_path)
     try:
         return [
             r[0]
@@ -68,7 +67,7 @@ def _run_tsv_import(header, rows, columns, workbook: str, run_dir: Path, profile
 
 
 def _fetch_all(db_path: str, sql: str, params=None):
-    con = duckdb.connect(db_path)
+    con = connect(db_path)
     try:
         return con.execute(sql, params or []).fetchall(), [d[0] for d in con.description]
     finally:

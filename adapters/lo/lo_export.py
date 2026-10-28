@@ -3,8 +3,7 @@
 import csv
 from pathlib import Path
 
-import duckdb
-
+from db import connect
 from mapping import coerce_cell, columns_from_names_types, create_table_sql, insert_sql
 from runner import run_op, write_op_ini
 
@@ -35,7 +34,7 @@ def export_range(db_path: str, workbook: str, source: dict, run_dir: Path, profi
     base_types = types if len(types) == len(names) else ["VARCHAR"] * len(names)
     columns = columns_from_names_types(names, base_types, source.get("overrides"))
     typed = [[coerce_cell(v, columns[i]["type"]) for i, v in enumerate(row)] for row in data]
-    con = duckdb.connect(db_path)
+    con = connect(db_path)
     try:
         mode = source.get("mode", "create")
         if mode not in ("create", "overwrite"):

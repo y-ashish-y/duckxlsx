@@ -1,68 +1,69 @@
-import duckdbPkg from "duckdb";
-
-interface DuckDBDatabase {
-  all(
-    sql: string,
-    ...args: [...params: unknown[], cb: (err: Error | null, rows: Record<string, unknown>[]) => void]
-  ): void;
-  close(cb: () => void): void;
-}
-
-const { Database } = duckdbPkg as unknown as { Database: new (path: string) => DuckDBDatabase };
+import { DuckDBInstance, type DuckDBConnection, type DuckDBValue } from "@duckdb/node-api";
 
 export interface Engine {
   query<T = Record<string, unknown>>(sql: string, ...params: unknown[]): Promise<T[]>;
   close(): Promise<void>;
 }
 
-// single-writer rule for the file: only one handle per path per process.
-// duckdb@1.4.x on Windows cannot establish a second connection to the same
-// path — not concurrently, and not again after close() — so every NodeEngine
-// for a given path shares one refcounted Database handle.
-const sharedDatabases = new Map<string, { db: DuckDBDatabase; refs: number }>();
+// Keep new files at the 1.5.6 storage version: the taskpane still ships
+// DuckDB-WASM 1.5.x, which cannot read 2.0-format files (2.0 reads both).
+const CREATE_OPTIONS = { storage_compatibility_version: "v1.5.6" };
 
-function acquireShared(path: string): DuckDBDatabase {
+// single-writer rule for the file: only one instance per path per process.
+// @duckdb/node-api (Neo) replaces the legacy duckdb@1.4.x package (which stops
+// at 1.4.4 and cannot speak 2.0); every NodeEngine for a path shares one
+// refcounted instance, and each engine gets its own connection on it.
+const sharedInstances = new Map<string, { instance: Promise<DuckDBInstance>; refs: number }>();
+
+function acquireInstance(path: string): Promise<DuckDBInstance> {
   if (path === ":memory:") {
     // Memory databases are per-instance by design (no file lock to collide with);
-    // only real file paths go through the shared-handle registry.
-    return new Database(path);
+    // only real file paths go through the shared-instance registry.
+    return DuckDBInstance.create(path, CREATE_OPTIONS);
   }
-  const entry = sharedDatabases.get(path);
+  const entry = sharedInstances.get(path);
   if (entry) {
     entry.refs += 1;
-    return entry.db;
+    return entry.instance;
   }
-  const db = new Database(path);
-  sharedDatabases.set(path, { db, refs: 1 });
-  return db;
+  const instance = DuckDBInstance.create(path, CREATE_OPTIONS);
+  sharedInstances.set(path, { instance, refs: 1 });
+  // Do not poison the registry with a rejected create (e.g. file locked elsewhere).
+  instance.catch(() => {
+    if (sharedInstances.get(path)?.instance === instance) sharedInstances.delete(path);
+  });
+  return instance;
 }
 
-function releaseShared(path: string): Promise<void> {
-  if (path === ":memory:") return Promise.resolve();
-  const entry = sharedDatabases.get(path);
-  if (!entry) return Promise.resolve();
+function releaseInstance(path: string): void {
+  if (path === ":memory:") return;
+  const entry = sharedInstances.get(path);
+  if (!entry) return;
   entry.refs -= 1;
-  // Never actually close: duckdb@1.4.x on Windows cannot attach a path again after
-  // close (or concurrently) within one process — the second connection never
-  // establishes. The single-writer rule wants the lock held for process lifetime,
-  // so the shared handle stays live until process exit; close() just drops a ref.
-  return Promise.resolve();
+  // Never actually close: an open instance holds the single-writer lock, and
+  // Neo can hand out further connections to the same file while it stays live.
+  // close() only drops this engine's ref; the shared instance lives until exit.
 }
 
 // ponytail: native binding for tests/dev; taskpane uses WasmEngine (same SQL) — see src/wasm-engine.ts
 export class NodeEngine implements Engine {
-  private db: DuckDBDatabase;
+  private connection: Promise<DuckDBConnection>;
+
   constructor(private path: string) {
-    this.db = acquireShared(path);
+    this.connection = acquireInstance(path).then((instance) => instance.connect());
   }
 
-  query<T = Record<string, unknown>>(sql: string, ...params: unknown[]): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, ...params, (err, rows) => (err ? reject(err) : resolve(rows as T[])));
-    });
+  async query<T = Record<string, unknown>>(sql: string, ...params: unknown[]): Promise<T[]> {
+    const connection = await this.connection;
+    const reader =
+      params.length === 0
+        ? await connection.runAndReadAll(sql)
+        : await connection.runAndReadAll(sql, params as DuckDBValue[]);
+    // getRowObjectsJS converts DuckDBValue wrappers to plain JS (Date, number, bigint, ...).
+    return reader.getRowObjectsJS() as unknown as T[];
   }
 
-  close(): Promise<void> {
-    return releaseShared(this.path);
+  async close(): Promise<void> {
+    releaseInstance(this.path);
   }
 }

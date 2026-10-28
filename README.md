@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Node](https://img.shields.io/badge/node-22%2B-green?style=flat-square)](https://nodejs.org/) [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://www.python.org/) [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#license)
+[![Node](https://img.shields.io/badge/node-22%2B-green?style=flat-square)](https://nodejs.org/) [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://www.python.org/) [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#license)
 
 </div>
 
@@ -41,13 +41,17 @@ $ export GRIDCRAFT_CLI=/path/to/gridcraft-cli
 
 Saved imports live in `~/.config/duckxlsx/imports.json` (override with `DUCKXLSX_STORE`).
 
+### DuckDB versions
+
+The CLI and LibreOffice adapter run DuckDB 2.0 (`@duckdb/node-api` and Python `duckdb` 2.0.0). The Excel taskpane still runs DuckDB-WASM 1.5.x, so new database files are created in the 1.5 storage format: both 2.0 clients can still read and write them, and the taskpane can open them. Files created by an external DuckDB 2.0 process use the new storage format and will not open in the taskpane until DuckDB-WASM 2.0 ships.
+
 ### LibreOffice adapter
 
-Python 3.10+ and headless LibreOffice (flatpak `org.libreoffice.LibreOffice` verified on 26.8.1.1):
+Python 3.11+ (duckdb 2.0 requirement) and headless LibreOffice (flatpak `org.libreoffice.LibreOffice` verified on 26.8.1.1):
 
 ```console
 $ python3 -m venv adapters/lo/.venv
-$ adapters/lo/.venv/bin/pip install duckdb pytest
+$ adapters/lo/.venv/bin/pip install duckdb==2.0.0 pytest
 $ adapters/lo/.venv/bin/python adapters/lo/setup.py   # deploys the Basic driver
 ```
 
